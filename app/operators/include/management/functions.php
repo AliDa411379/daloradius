@@ -584,6 +584,18 @@ function count_nas($dbSocket) {
 }
 
 /**
+ * Counts the number of agents in the database.
+ *
+ * @param object $dbSocket The database connection object with a query() method.
+ * @return int The number of agents.
+ */
+function count_agents($dbSocket) {
+    global $configValues;
+    $sql = sprintf("SELECT COUNT(`id`) FROM %s", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
+    return count_sql($dbSocket, $sql);  
+}
+
+/**
  * Get the number of rows from a COUNT query.
  *
  * This function executes a SQL COUNT query and returns the result as an integer.

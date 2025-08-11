@@ -429,6 +429,12 @@ $l['all']['BusinessAddress'] = "Business Address";
 $l['all']['BusinessWebsite'] = "Business Website";
 $l['all']['BusinessEmail'] = "Business Email";
 $l['all']['BusinessContactPerson'] = "Business Contact Person";
+
+$l['all']['AgentName'] = "Agent Name";
+$l['all']['Company'] = "Company";
+$l['all']['Phone'] = "Phone";
+$l['all']['Email'] = "Email";
+$l['all']['Address'] = "Address";
 $l['all']['DBPasswordEncryption'] = "DB Password Encryption Type";
 
 $l['all']['Calling Station ID'] = "Calling Station ID";
@@ -576,6 +582,8 @@ $l['Tooltip']['EditRealm'] = "Edit Realm";
 $l['Tooltip']['EditProxy'] = "Edit Proxy";
 
 $l['Tooltip']['EditGroup'] = "Edit Group";
+$l['Tooltip']['EditAgent'] = "Edit Agent";
+$l['Tooltip']['RemoveAgent'] = "Remove Agent";
 
 $l['FormField']['mngradgroupcheck.php']['ToolTip']['Value'] = "If you specify value then only the single record that matches both the groupname and the specific value which you have specified will be removed. If you omit the value then all records for that particular groupname will be removed!";
 
@@ -784,6 +792,12 @@ $l['button']['NewOperator'] = "New Operator";
 $l['button']['EditOperator'] = "Edit Operator";
 $l['button']['RemoveOperator'] = "Remove Operator";
 
+$l['button']['ListAgents'] = "List Agents";
+$l['button']['NewAgent'] = "New Agent";
+$l['button']['EditAgent'] = "Edit Agent";
+$l['button']['RemoveAgent'] = "Remove Agent";
+$l['button']['CSVExport'] = "CSV Export";
+
 $l['button']['ProcessQuery'] = "Process Query";
 
 
@@ -797,6 +811,8 @@ $l['button']['ProcessQuery'] = "Process Query";
  ************************************************************************************/
 
 $l['title']['ImportUsers'] = "Import Users";
+$l['title']['AgentManagement'] = "Agent Management";
+$l['title']['ImportExport'] = "Import/Export";
 
 
 $l['title']['Dashboard'] = "Dashboard";
@@ -860,6 +876,7 @@ $l['title']['HotspotInfo'] = "Hotspot Info";
 $l['title']['HotspotRemoval'] = "Hotspot Removal";
 
 $l['title']['ContactInfo'] = "Contact Info";
+$l['title']['AgentInfo'] = "Agent Info";
 
 $l['title']['Plan'] = "Plan";
 
@@ -1170,6 +1187,19 @@ $l['Intro']['configbackupmanagebackups.php'] = "Manage Backups";
 $l['Intro']['configoperators.php'] = "Operators Configuration";
 $l['Intro']['configoperatorsdel.php'] = "Remove Operator";
 $l['Intro']['configoperatorsedit.php'] = "Edit Operator Settings";
+
+$l['Intro']['configagents.php'] = "Agents Configuration";
+$l['Intro']['configagentsnew.php'] = "New Agent";
+$l['Intro']['configagentslist.php'] = "List Agents";
+$l['Intro']['configagentsedit.php'] = "Edit Agent";
+$l['Intro']['configagentsdel.php'] = "Remove Agent";
+
+// Management section agents
+$l['Intro']['mngagents.php'] = "Agents Management";
+$l['Intro']['mngagentsnew.php'] = "New Agent";
+$l['Intro']['mngagentslist.php'] = "List Agents";
+$l['Intro']['mngagentsedit.php'] = "Edit Agent";
+$l['Intro']['mngagentsdel.php'] = "Remove Agent";
 $l['Intro']['configoperatorsnew.php'] = "New Operator";
 $l['Intro']['configoperatorslist.php'] = "Operators Listing";
 
@@ -1554,6 +1584,26 @@ $l['helpPage']['configoperatorsedit'] = "Edit the operator user details below";
 $l['helpPage']['configoperatorsnew'] = "You may fill below details for a new operator user addition to database";
 $l['helpPage']['configoperatorslist'] = "Listing all Operators in database";
 
+$l['helpPage']['configagents'] = "Agents Configuration";
+$l['helpPage']['configagentsdel'] = "To remove an agent from the database you must provide the agent ID.";
+$l['helpPage']['configagentsedit'] = "Edit the agent details below";
+$l['helpPage']['configagentsnew'] = "You may fill below details for a new agent addition to database";
+$l['helpPage']['configagentslist'] = "Listing all Agents in database";
+
+// Management section agents help
+$l['helpPage']['mngagents'] = "Agents Management";
+$l['helpPage']['mngagentsdel'] = "To remove an agent from the database you must provide the agent ID.";
+$l['helpPage']['mngagentsedit'] = "Edit the agent details below";
+$l['helpPage']['mngagentsnew'] = "You may fill below details for a new agent addition to database";
+$l['helpPage']['mngagentslist'] = "Listing all Agents in database";
+
+// Management section agents help text
+$l['helpText']['mngagents'] = "Manage sales agents and representatives in the system.";
+$l['helpText']['mngagentsdel'] = "Remove an agent from the system.";
+$l['helpText']['mngagentsedit'] = "Modify agent information and contact details.";
+$l['helpText']['mngagentsnew'] = "Create a new agent with contact information.";
+$l['helpText']['mngagentslist'] = "View and manage all agents in the system.";
+
 $l['helpPage']['configbackup'] = <<<EOF
 <h1 class="fs-5">Backup</h1>
 <p>Manage database backups</p>
@@ -1883,6 +1933,7 @@ $l['submenu']['General'] = "General";
 $l['submenu']['Reporting'] = "Reporting";
 $l['submenu']['Maintenance'] = "Maintenance";
 $l['submenu']['Operators'] = "Operators";
+$l['submenu']['Agents'] = "Agents";
 $l['submenu']['Backup'] = "Backup";
 $l['submenu']['Logs'] = "Logs";
 $l['submenu']['Status'] = "Status";

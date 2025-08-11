@@ -59,6 +59,7 @@
     $total_users = count_users($dbSocket);
     $total_hotspots = count_hotspots($dbSocket);
     $total_nas = count_nas($dbSocket);
+    $total_agents = count_agents($dbSocket);
 
 
     function print_title($title, $href, $icon) {
@@ -147,6 +148,14 @@ HTML;
             "linkURL" => "mng-hs-list.php",
             "bgColor" => "primary",
             "icon" => "wifi"
+        ],
+        [
+            "title" => t('submenu', 'Agents'),
+            "total" => sprintf("%s: <strong>%d</strong>", t('all', 'Total'), $total_agents),
+            "linkText" => "Go to agents list",
+            "linkURL" => "mng-agents-list.php",
+            "bgColor" => "warning",
+            "icon" => "person-badge-fill"
         ]
     ];
 
