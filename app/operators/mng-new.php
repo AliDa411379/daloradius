@@ -23,6 +23,7 @@
 
     include("library/checklogin.php");
     $operator = $_SESSION['operator_user'];
+    $operator_id = $_SESSION['operator_id'];
 
     include('../common/includes/config_read.php');
     include('library/check_operator_perm.php');
@@ -31,6 +32,7 @@
     include("../common/includes/validation.php");
     include("../common/includes/layout.php");
     include_once("include/management/functions.php");
+    include_once("library/agent_functions.php");
 
     // init logging variables
     $log = "visited page: ";
@@ -100,45 +102,17 @@
 
             isset($_POST['dictAttributes']) ? $dictAttributes = $_POST['dictAttributes'] : $dictAttributes = "";
 
-            // billing info variables
-            $bi_contactperson = (array_key_exists('bi_contactperson', $_POST) && isset($_POST['bi_contactperson'])) ? $_POST['bi_contactperson'] : "";
-            $bi_company = (array_key_exists('bi_company', $_POST) && isset($_POST['bi_company'])) ? $_POST['bi_company'] : "";
-            $bi_email = (array_key_exists('bi_email', $_POST) && isset($_POST['bi_email'])) ? $_POST['bi_email'] : "";
-            $bi_phone = (array_key_exists('bi_phone', $_POST) && isset($_POST['bi_phone'])) ? $_POST['bi_phone'] : "";
-            $bi_address = (array_key_exists('bi_address', $_POST) && isset($_POST['bi_address'])) ? $_POST['bi_address'] : "";
-            $bi_city = (array_key_exists('bi_city', $_POST) && isset($_POST['bi_city'])) ? $_POST['bi_city'] : "";
-            $bi_state = (array_key_exists('bi_state', $_POST) && isset($_POST['bi_state'])) ? $_POST['bi_state'] : "";
-            $bi_country = (array_key_exists('bi_country', $_POST) && isset($_POST['bi_country'])) ? $_POST['bi_country'] : "";
-            $bi_zip = (array_key_exists('bi_zip', $_POST) && isset($_POST['bi_zip'])) ? $_POST['bi_zip'] : "";
-            $bi_postalinvoice = (array_key_exists('bi_postalinvoice', $_POST) && isset($_POST['bi_postalinvoice'])) ? $_POST['bi_postalinvoice'] : "";
-            $bi_faxinvoice = (array_key_exists('bi_faxinvoice', $_POST) && isset($_POST['bi_faxinvoice'])) ? $_POST['bi_faxinvoice'] : "";
-            $bi_emailinvoice = (array_key_exists('bi_emailinvoice', $_POST) && isset($_POST['bi_emailinvoice'])) ? $_POST['bi_emailinvoice'] : "";
-
-            $bi_paymentmethod = (array_key_exists('bi_paymentmethod', $_POST) && isset($_POST['bi_paymentmethod'])) ? $_POST['bi_paymentmethod'] : "";
-            $bi_cash = (array_key_exists('bi_cash', $_POST) && isset($_POST['bi_cash'])) ? $_POST['bi_cash'] : "";
-            $bi_creditcardname = (array_key_exists('bi_creditcardname', $_POST) && isset($_POST['bi_creditcardname'])) ? $_POST['bi_creditcardname'] : "";
-            $bi_creditcardnumber = (array_key_exists('bi_creditcardnumber', $_POST) && isset($_POST['bi_creditcardnumber'])) ? $_POST['bi_creditcardnumber'] : "";
-            $bi_creditcardverification = (array_key_exists('bi_creditcardverification', $_POST) && isset($_POST['bi_creditcardverification'])) ? $_POST['bi_creditcardverification'] : "";
-            $bi_creditcardtype = (array_key_exists('bi_creditcardtype', $_POST) && isset($_POST['bi_creditcardtype'])) ? $_POST['bi_creditcardtype'] : "";
-            $bi_creditcardexp = (array_key_exists('bi_creditcardexp', $_POST) && isset($_POST['bi_creditcardexp'])) ? $_POST['bi_creditcardexp'] : "";
-
-            $bi_lead = (array_key_exists('bi_lead', $_POST) && isset($_POST['bi_lead'])) ? $_POST['bi_lead'] : "";
-            $bi_coupon = (array_key_exists('bi_coupon', $_POST) && isset($_POST['bi_coupon'])) ? $_POST['bi_coupon'] : "";
-            $bi_ordertaker = (array_key_exists('bi_ordertaker', $_POST) && isset($_POST['bi_ordertaker'])) ? $_POST['bi_ordertaker'] : "";
-
-            $bi_notes = (array_key_exists('bi_notes', $_POST) && isset($_POST['bi_notes'])) ? $_POST['bi_notes'] : "";
-
-            // this is forced to 0 (disabled) if user portal login password is empty
-            $bi_changeuserbillinfo = (!empty($ui_PortalLoginPassword) && isset($_POST['bi_changeuserbillinfo']) && $_POST['bi_changeuserbillinfo'] === '1')
-                                   ? '1' : '0';
-
-            //~ isset($_POST['bi_billstatus']) ? $bi_billstatus = $_POST['bi_billstatus'] : $bi_billstatus = "";
-            //~ isset($_POST['bi_lastbill']) ? $bi_lastbill = $_POST['bi_lastbill'] : $bi_lastbill = "";
-            //~ isset($_POST['bi_nextbill']) ? $bi_nextbill = $_POST['bi_nextbill'] : $bi_nextbill = "";
-            $bi_nextinvoicedue = (array_key_exists('bi_nextinvoicedue', $_POST) && isset($_POST['bi_nextinvoicedue'])) ? $_POST['bi_nextinvoicedue'] : "";
-            $bi_billdue = (array_key_exists('bi_billdue', $_POST) && isset($_POST['bi_billdue'])) ? $_POST['bi_billdue'] : "";
-
             include('../common/includes/db_open.php');
+            
+            // Auto-assign current agent if operator is an agent
+            $selected_agents = array();
+            $current_agent_id = getCurrentOperatorAgentId($dbSocket, $operator_id, $configValues);
+            if ($current_agent_id) {
+                $selected_agents = array($current_agent_id);
+            } else {
+                // Fallback to form selection for non-agent operators
+                $selected_agents = (array_key_exists('selected_agents', $_POST) && isset($_POST['selected_agents'])) ? $_POST['selected_agents'] : array();
+            }
 
             // we will have a $username_to_check, only
             // if required arguments have been supplied
@@ -225,13 +199,8 @@
                     $skipList = array( "authType", "username", "password", "passwordType", "groups",
                                        "macaddress", "pincode", "submit", "firstname", "lastname", "email",
                                        "department", "company", "workphone", "homephone", "mobilephone", "address", "city",
-                                       "state", "country", "zip", "notes", "bi_contactperson", "bi_company", "bi_email", "bi_phone",
-                                       "bi_address", "bi_city", "bi_state", "bi_country", "bi_zip", "bi_paymentmethod", "bi_cash",
-                                       "bi_creditcardname", "bi_creditcardnumber", "bi_creditcardverification", "bi_creditcardtype",
-                                       "bi_creditcardexp", "bi_notes", "bi_lead", "bi_coupon", "bi_ordertaker", "bi_billstatus",
-                                       "bi_lastbill", "bi_nextbill", "bi_nextinvoicedue", "bi_billdue", "bi_postalinvoice", "bi_faxinvoice",
-                                       "bi_emailinvoice", "bi_changeuserbillinfo", "changeUserInfo", "copycontact", "portalLoginPassword",
-                                       "enableUserPortalLogin", "csrf_token", "submit"
+                                       "state", "country", "zip", "notes", "selected_agents", "changeUserInfo", "copycontact", 
+                                       "portalLoginPassword", "enableUserPortalLogin", "csrf_token", "submit"
                                      );
 
                     $attributesCount = handleAttributes($dbSocket, $u, $skipList);
@@ -263,48 +232,37 @@
 
                     $addedUserInfo = (add_user_info($dbSocket, $u, $params)) ? "stored" : "nothing to store";
 
-                    // adding billing info
-                    $params = array(
-                                        //~ "planName" => $planName,
-                                        "contactperson" => $bi_contactperson,
-                                        "company" => $bi_company,
-                                        "email" => $bi_email,
-                                        "phone" => $bi_phone,
-                                        "address" => $bi_address,
-                                        "city" => $bi_city,
-                                        "state" => $bi_state,
-                                        "country" => $bi_country,
-                                        "zip" => $bi_zip,
-                                        "postalinvoice" => $bi_postalinvoice,
-                                        "faxinvoice" => $bi_faxinvoice,
-                                        "emailinvoice" => $bi_emailinvoice,
-
-                                        "paymentmethod" => $bi_paymentmethod,
-                                        "cash" => $bi_cash,
-                                        "creditcardname" => $bi_creditcardname,
-                                        "creditcardnumber" => $bi_creditcardnumber,
-                                        "creditcardverification" => $bi_creditcardverification,
-                                        "creditcardtype" => $bi_creditcardtype,
-                                        "creditcardexp" => $bi_creditcardexp,
-
-                                        "lead" => $bi_lead,
-                                        "coupon" => $bi_coupon,
-                                        "ordertaker" => $bi_ordertaker,
-
-                                        "notes" => $bi_notes,
-                                        "changeuserbillinfo" => $bi_changeuserbillinfo,
-
-                                        //~ "billstatus" => $bi_billstatus,
-                                        //~ "lastbill" => $bi_lastbill,
-                                        //~ "nextbill" => $bi_nextbill,
-                                        "billdue" => $bi_billdue,
-                                        "nextinvoicedue" => $bi_nextinvoicedue,
-
-                                        "creationdate" => $current_datetime,
-                                        "creationby" => $currBy,
-                                   );
-
-                    $addedBillingInfo = (add_user_billing_info($dbSocket, $u, $params)) ? "stored" : "nothing to store";
+                    // adding agent assignments (replaced billing info)
+                    $addedAgentInfo = "nothing to store";
+                    $agentCount = 0;
+                    
+                    if (!empty($selected_agents)) {
+                        // First get the user_id from userinfo table
+                        $sql = sprintf("SELECT id FROM userinfo WHERE username='%s'", 
+                                       $dbSocket->escapeSimple($u));
+                        $res = $dbSocket->query($sql);
+                        $logDebugSQL .= "$sql;\n";
+                        
+                        if ($res && $row = $res->fetchRow()) {
+                            $user_id = $row[0];
+                            
+                            // Insert agent assignments
+                            foreach ($selected_agents as $agent_id) {
+                                if (!empty($agent_id)) {
+                                    $sql = sprintf("INSERT INTO user_agent (user_id, agent_id) VALUES (%d, %d)",
+                                                   intval($user_id), intval($agent_id));
+                                    $res_agent = $dbSocket->query($sql);
+                                    $logDebugSQL .= "$sql;\n";
+                                    
+                                    if ($res_agent) {
+                                        $agentCount++;
+                                    }
+                                }
+                            }
+                            
+                            $addedAgentInfo = ($agentCount > 0) ? "stored $agentCount agent(s)" : "no agents assigned";
+                        }
+                    }
 
                     $u_enc = htmlspecialchars($u, ENT_QUOTES, 'UTF-8');
 
@@ -314,7 +272,7 @@
                                 . sprintf("<li><strong>attributes count</strong>: %d</li>", $attributesCount)
                                 . sprintf("<li><strong>groups count</strong>: %d</li>", $groupsCount)
                                 . sprintf("<li><strong>user info</strong>: %s</li>", $addedUserInfo)
-                                . sprintf("<li><strong>billing info</strong>: %s</li>", $addedBillingInfo)
+                                . sprintf("<li><strong>agent assignments</strong>: %s</li>", $addedAgentInfo)
                                 . "</ul>"
 
 
@@ -347,10 +305,12 @@
     $extra_css = array();
 
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/dynamic_attributes.js",
-        "static/js/ajaxGeneric.js",
-        "static/js/productive_funcs.js",
+        // Ensure Bootstrap is loaded early on this page
+        "../common/static/js/bootstrap.bundle.min.js",
+        "../common/static/js/ajax.js",
+        "../common/static/js/dynamic_attributes.js",
+        "../common/static/js/ajaxGeneric.js",
+        "../common/static/js/productive_funcs.js",
     );
 
     $title = t('Intro','mngnew.php');
@@ -466,7 +426,7 @@
                                      );
 
         // set navbar stuff
-        $navkeys = array( 'AccountInfo', 'UserInfo', 'BillingInfo', 'Attributes' );
+        $navkeys = array( 'AccountInfo', 'UserInfo', 'AgentInfo', 'Attributes' );
 
         // print navbar controls
         print_tab_header($navkeys);
@@ -527,10 +487,13 @@
         close_tab($navkeys, 1);
 
 
-        // open 2-th tab (shown)
-        open_tab($navkeys, 2);
-        include_once('include/management/userbillinfo.php');
-        close_tab($navkeys, 2);
+		// open 2-th tab (shown)
+		open_tab($navkeys, 2);
+		// ensure DB connection exists for the included section
+		include('../common/includes/db_open.php');
+		include_once('include/management/userbillinfo.php');
+		include('../common/includes/db_close.php');
+		close_tab($navkeys, 2);
 
         // open 3-th tab (shown)
         open_tab($navkeys, 3);
@@ -565,22 +528,44 @@
 
     include('include/config/logging.php');
 
-    $inline_extra_js = '
-function switchAuthType() {
-    var switcher = document.getElementById("authType");
+	$inline_extra_js = '
+	function switchAuthType() {
+		var switcher = document.getElementById("authType");
 
-    for (var i=0; i<switcher.length; i++) {
-        var fieldset_id = switcher[i].value + "-fieldset",
-            disabled = switcher.value != switcher[i].value,
-            fieldset = document.getElementById(fieldset_id);
+		for (var i=0; i<switcher.length; i++) {
+			var fieldset_id = switcher[i].value + "-fieldset",
+				disabled = switcher.value != switcher[i].value,
+				fieldset = document.getElementById(fieldset_id);
 
-        fieldset.disabled = disabled;
-        fieldset.style.display = (disabled) ? "none" : "block";
-    }
-}
+			fieldset.disabled = disabled;
+			fieldset.style.display = (disabled) ? "none" : "block";
+		}
+	}
 
-window.addEventListener("load", function() { switchAuthType(); });
-';
+	// Local fallback for tab switching if Bootstrap is not available
+	if (typeof window.openTab !== "function") {
+		window.openTab = function(event, tabId) {
+			if (event && typeof event.preventDefault === "function") { event.preventDefault(); }
+			var links = document.querySelectorAll("button.nav-link");
+			for (var i = 0; i < links.length; i++) {
+				links[i].classList.remove("active");
+				links[i].setAttribute("aria-selected", "false");
+			}
+			var panes = document.querySelectorAll(".tab-pane");
+			for (var j = 0; j < panes.length; j++) {
+				panes[j].classList.remove("show");
+				panes[j].classList.remove("active");
+			}
+			var pane = document.getElementById(tabId);
+			if (pane) { pane.classList.add("show"); pane.classList.add("active"); }
+			var btnId = tabId.replace(/-tab$/, "-button");
+			var btn = document.getElementById(btnId);
+			if (btn) { btn.classList.add("active"); btn.setAttribute("aria-selected", "true"); }
+		};
+	}
+
+	window.addEventListener("load", function() { switchAuthType(); });
+	';
 
     print_footer_and_html_epilogue($inline_extra_js);
 ?>

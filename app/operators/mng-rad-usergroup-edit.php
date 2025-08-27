@@ -155,7 +155,7 @@
     $extra_css = array();
 
     $extra_js = array(
-        "static/js/productive_funcs.js",
+        "../common/static/js/productive_funcs.js",
     );
 
     $title = t('Intro','mngradusergroupedit');

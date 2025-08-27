@@ -26,6 +26,7 @@ include('../checklogin.php');
 // datatype => allowed actions
 $whitelist = array();
 $whitelist["usernames"] = array( "list" );
+$whitelist["userinfo"] = array( "get" );
 
 $data = array();
 
@@ -77,6 +78,47 @@ if (isset($_GET['datatype']) && in_array(strtolower(trim($_GET['datatype'])), ar
             
             
                 break; // case "usernames"
+            }
+            
+            case "userinfo": {
+                switch ($action) {
+                    case "get":
+                        if (isset($_GET['username']) && !empty(trim($_GET['username']))) {
+                            include('../../../common/includes/db_open.php');
+                            include('../../include/management/functions.php');
+                            
+                            $username = trim($_GET['username']);
+                            
+                            // Get basic user info
+                            $sql = sprintf("SELECT firstname, lastname, email, company, workphone, city, country 
+                                           FROM %s WHERE username='%s'", 
+                                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'], 
+                                           $dbSocket->escapeSimple($username));
+                            $res = $dbSocket->query($sql);
+                            
+                            if ($res && $row = $res->fetchRow()) {
+                                $data = array(
+                                    'username' => $username,
+                                    'firstname' => $row[0],
+                                    'lastname' => $row[1],
+                                    'email' => $row[2],
+                                    'company' => $row[3],
+                                    'workphone' => $row[4],
+                                    'city' => $row[5],
+                                    'country' => $row[6],
+                                    'agents' => get_user_agents($dbSocket, $username)
+                                );
+                            } else {
+                                $data = array('error' => 'User not found');
+                            }
+                            
+                            include('../../../common/includes/db_close.php');
+                        } else {
+                            $data = array('error' => 'Username parameter required');
+                        }
+                        break;
+                }
+                break; // case "userinfo"
             }
                 
             // case "other category"

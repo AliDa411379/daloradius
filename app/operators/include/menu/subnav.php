@@ -69,6 +69,7 @@ $subnav["mng"] = array(
                             'Attributes' => 'mng-rad-attributes.php',
                             'Realm/Proxy' => 'mng-rad-realms.php',
                             'IP-Pool' => 'mng-rad-ippool.php',
+                            'Nodes' => 'mng-nodes-list.php',
                         );
 
 // help subnav elements

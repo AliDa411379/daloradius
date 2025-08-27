@@ -28,6 +28,7 @@
     include_once("lang/main.php");
     include_once("../common/includes/validation.php");
     include("../common/includes/layout.php");
+    include_once("library/agent_functions.php");
 
     // we partially strip some character and
     // leave validation/escaping to other functions used later in the script
@@ -57,9 +58,9 @@
 
     // print HTML prologue
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/ajaxGeneric.js",
-        "static/js/pages_common.js"
+        "../common/static/js/ajax.js",
+        "../common/static/js/ajaxGeneric.js",
+        "../common/static/js/pages_common.js"
     );
 
     $title = t('Intro','mngsearch.php');
@@ -147,6 +148,13 @@
     //imploding nested_condition 2
     if (count($nested_condition2) > 0) {
         $sql_WHERE[] = sprintf("(%s)", implode(" OR ", $nested_condition2));
+    }
+
+    // Add agent filtering if current operator is an agent
+    $agent_filtering_applied = addAgentFilteringToUserQuery($dbSocket, $operator, $configValues, $sql_WHERE, 'ui');
+    if ($agent_filtering_applied) {
+        $logQuery = "performed query for agent's own users on page: ";
+        displayAgentNotice();
     }
 
     // setup php session variables for exporting

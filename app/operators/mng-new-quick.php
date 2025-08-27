@@ -304,9 +304,11 @@
     $extra_css = array();
 
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/ajaxGeneric.js",
-        "static/js/productive_funcs.js",
+        // Ensure Bootstrap is loaded early on this page
+        "../common/static/js/bootstrap.bundle.min.js",
+        "../common/static/js/ajax.js",
+        "../common/static/js/ajaxGeneric.js",
+        "../common/static/js/productive_funcs.js",
     );
 
     $title = t('Intro','mngnewquick.php');
@@ -503,7 +505,10 @@
     open_tab($navkeys, 2);
 
     $customApplyButton = sprintf('<input type="submit" name="submit" value="%s" class="button">', t('buttons','apply'));
+    // ensure DB connection exists for the included section
+    include('../common/includes/db_open.php');
     include_once('include/management/userbillinfo.php');
+    include('../common/includes/db_close.php');
 
     close_tab($navkeys, 2);
 
@@ -515,5 +520,27 @@
     print_back_to_previous_page();
 
     include('include/config/logging.php');
-    print_footer_and_html_epilogue();
+    $inline_extra_js = '
+if (typeof window.openTab !== "function") {
+    window.openTab = function(event, tabId) {
+        if (event && typeof event.preventDefault === "function") { event.preventDefault(); }
+        var links = document.querySelectorAll("button.nav-link");
+        for (var i = 0; i < links.length; i++) {
+            links[i].classList.remove("active");
+            links[i].setAttribute("aria-selected", "false");
+        }
+        var panes = document.querySelectorAll(".tab-pane");
+        for (var j = 0; j < panes.length; j++) {
+            panes[j].classList.remove("show");
+            panes[j].classList.remove("active");
+        }
+        var pane = document.getElementById(tabId);
+        if (pane) { pane.classList.add("show"); pane.classList.add("active"); }
+        var btnId = tabId.replace(/-tab$/, "-button");
+        var btn = document.getElementById(btnId);
+        if (btn) { btn.classList.add("active"); btn.setAttribute("aria-selected", "true"); }
+    };
+}
+';
+    print_footer_and_html_epilogue($inline_extra_js);
 ?>

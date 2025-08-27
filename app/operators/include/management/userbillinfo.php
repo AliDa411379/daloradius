@@ -15,7 +15,7 @@
  *
  *********************************************************************************************************
  *
- * Description:    provides user billing information input fields
+ * Description:    provides user agent selection input fields (replaced billing info)
  *
  * Authors:        Liran Tal <liran@lirantal.com>
  *                 Filippo Lauria <filippo.lauria@iit.cnr.it>
@@ -29,162 +29,400 @@ if (strpos($_SERVER['PHP_SELF'], '/include/management/userbillinfo.php') !== fal
     exit;
 }
 
-$_input_descriptors0 = array();
+// Check if current operator is an agent
+include_once('library/agent_functions.php');
+$operator_id = $_SESSION['operator_id'];
+$current_agent_id = getCurrentOperatorAgentId($dbSocket, $operator_id, $configValues);
+$is_current_operator_agent = ($current_agent_id !== null);
 
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','PlanName'), 'disabled' => true,
-                               'value' => ((isset($bi_planname)) ? $bi_planname : ''), 'name' => 'bi_planname' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','ContactPerson'),
-                               'value' => ((isset($bi_contactperson)) ? $bi_contactperson : ''), 'name' => 'bi_contactperson' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Company'),
-                               'value' => ((isset($bi_company)) ? $bi_company : ''), 'name' => 'bi_company' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Email'),
-                               'value' => ((isset($bi_email)) ? $bi_email : ''), 'name' => 'bi_email' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Phone'),
-                               'value' => ((isset($bi_phone)) ? $bi_phone : ''), 'name' => 'bi_phone'  );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Address'),
-                               'value' => ((isset($bi_address)) ? $bi_address : ''), 'name' => 'bi_address' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','City'),
-                               'value' => ((isset($bi_city)) ? $bi_city : ''), 'name' => 'bi_city' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','State'),
-                               'value' => ((isset($bi_state)) ? $bi_state : ''), 'name' => 'bi_state' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Country'),
-                               'value' => ((isset($bi_country)) ? $bi_country : ''), 'name' => 'bi_country' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Zip'),
-                               'value' => ((isset($bi_zip)) ? $bi_zip : ''), 'name' => 'bi_zip' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('all','PostalInvoice'),
-                               'value' => ((isset($bi_postalinvoice)) ? $bi_postalinvoice : ''), 'name' => 'bi_postalinvoice' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('all','FaxInvoice'),
-                               'value' => ((isset($bi_faxinvoice)) ? $bi_faxinvoice : ''), 'name' => 'bi_faxinvoice' );
-$_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('all','EmailInvoice'),
-                               'value' => ((isset($bi_emailinvoice)) ? $bi_emailinvoice : ''), 'name' => 'bi_emailinvoice' );
+// Get available agents from database (using existing connection)
+$sql = sprintf("SELECT id, name, company FROM %s WHERE is_deleted = 0 ORDER BY name", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
+$res = $dbSocket->query($sql);
 
+$agent_options = array();
+if (!$is_current_operator_agent) {
+    $agent_options[''] = 'Select Agent...';
+}
+
+while ($row = $res->fetchRow()) {
+    $agent_id = $row[0];
+    $agent_name = $row[1];
+    $agent_company = $row[2];
+    $display_name = $agent_name . ($agent_company ? " ({$agent_company})" : "");
+    
+    // If current operator is an agent, only show their own agent
+    if ($is_current_operator_agent) {
+        if ($agent_id == $current_agent_id) {
+            $agent_options[$agent_id] = $display_name;
+        }
+    } else {
+        $agent_options[$agent_id] = $display_name;
+    }
+}
+
+// Agent selection will be rendered as custom HTML below
+
+// Function to generate smooth checkbox-based agent selection
+function generate_agent_checkboxes($agent_options, $selected_agents = array()) {
+    // Add custom CSS for smooth interactions
+    $html = '<style>
+    .agent-selection-container {
+        transition: all 0.3s ease;
+    }
+    .agent-item {
+        padding: 8px 12px;
+        margin: 2px 0;
+        border-radius: 4px;
+        transition: all 0.3s ease;
+    }
+    .agent-item:hover {
+        background-color: #e9ecef;
+        transform: translateX(2px);
+    }
+    
+    /* Special styling for currently assigned agents */
+    .agent-item.bg-light {
+        background-color: #d1e7dd !important;
+        border: 2px solid #198754 !important;
+        box-shadow: 0 2px 8px rgba(25, 135, 84, 0.2);
+        margin: 4px 0;
+    }
+    
+    .agent-item.bg-light:hover {
+        background-color: #c3e6cb !important;
+        transform: translateX(3px);
+        box-shadow: 0 4px 12px rgba(25, 135, 84, 0.3);
+    }
+    
+    .agent-item .form-check-input:checked + .form-check-label {
+        font-weight: 600;
+        color: #198754;
+    }
+    
+    .agent-checkbox {
+        margin-right: 8px;
+    }
+    
+    #agent-search {
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    #agent-search:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    }
+    
+    .btn-outline-primary:hover, .btn-outline-secondary:hover {
+        transform: translateY(-1px);
+        transition: transform 0.2s ease;
+    }
+    
+    /* Badge styling for "Currently Assigned" */
+    .badge.bg-success {
+        font-size: 0.65em;
+        padding: 0.25em 0.5em;
+        animation: fadeIn 0.5s ease-in;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+    }
+    
+    /* Icon styling */
+    .bi-check-circle-fill {
+        animation: bounceIn 0.6s ease-out;
+    }
+    
+    @keyframes bounceIn {
+        0% { transform: scale(0); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+    }
+    </style>';
+    
+    $html .= '<div class="agent-selection-container" style="max-height: 350px; overflow-y: auto; border: 1px solid #ddd; border-radius: 6px; padding: 15px; background-color: #f8f9fa;">';
+    
+    // Show current assignment status
+    $assigned_count = count($selected_agents);
+    $total_count = count($agent_options) - 1; // Subtract 1 for the empty option
+    
+    if ($assigned_count > 0) {
+        $html .= '<div class="alert alert-success alert-sm mb-3" role="alert">';
+        $html .= '<i class="bi bi-info-circle me-1"></i>';
+        $html .= '<strong>Current Status:</strong> ' . $assigned_count . ' agent(s) currently assigned to this user';
+        $html .= '</div>';
+    } else {
+        $html .= '<div class="alert alert-warning alert-sm mb-3" role="alert">';
+        $html .= '<i class="bi bi-exclamation-triangle me-1"></i>';
+        $html .= '<strong>No agents assigned</strong> - Select agents below to assign them to this user';
+        $html .= '</div>';
+    }
+    
+    // Search box for filtering
+    $html .= '<div class="mb-3">';
+    $html .= '<input type="text" id="agent-search" class="form-control form-control-sm" placeholder="Search agents..." onkeyup="filterAgents()">';
+    $html .= '</div>';
+    
+    // Select All / Deselect All buttons
+    $html .= '<div class="mb-3">';
+    $html .= '<button type="button" class="btn btn-sm btn-outline-primary me-2" onclick="selectAllAgents()">Select All</button>';
+    $html .= '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllAgents()">Deselect All</button>';
+    $html .= '</div>';
+    
+    // Agent checkboxes
+    $html .= '<div id="agent-list">';
+    foreach ($agent_options as $agent_id => $agent_name) {
+        if (empty($agent_id)) continue; // Skip the "Select Agent..." option
+        
+        $is_selected = in_array($agent_id, $selected_agents);
+        $checked = $is_selected ? 'checked' : '';
+        
+        // Add visual styling for pre-selected agents
+        $item_class = 'form-check agent-item';
+        $label_class = 'form-check-label';
+        if ($is_selected) {
+            $item_class .= ' bg-light border border-success rounded p-2 mb-1';
+            $label_class .= ' fw-bold text-success';
+        }
+        
+        $html .= '<div class="' . $item_class . '" data-agent-name="' . strtolower($agent_name) . '">';
+        $html .= '<input class="form-check-input agent-checkbox" type="checkbox" name="selected_agents[]" value="' . $agent_id . '" id="agent_' . $agent_id . '" ' . $checked . '>';
+        $html .= '<label class="' . $label_class . '" for="agent_' . $agent_id . '">';
+        
+        if ($is_selected) {
+            $html .= '<i class="bi bi-check-circle-fill text-success me-1"></i>';
+        }
+        
+        $html .= htmlspecialchars($agent_name);
+        
+        if ($is_selected) {
+            $html .= ' <small class="badge bg-success ms-1">Currently Assigned</small>';
+        }
+        
+        $html .= '</label>';
+        $html .= '</div>';
+    }
+    $html .= '</div>';
+    
+    $html .= '</div>';
+    
+    // JavaScript for smooth interactions
+    $html .= '
+    <script>
+    function filterAgents() {
+        const searchTerm = document.getElementById("agent-search").value.toLowerCase();
+        const agentItems = document.querySelectorAll(".agent-item");
+        let visibleCount = 0;
+        
+        agentItems.forEach(function(item) {
+            const agentName = item.getAttribute("data-agent-name");
+            if (agentName.includes(searchTerm)) {
+                item.style.display = "block";
+                item.style.opacity = "1";
+                visibleCount++;
+            } else {
+                item.style.display = "none";
+                item.style.opacity = "0";
+            }
+        });
+        
+        // Show/hide "no results" message
+        let noResultsMsg = document.getElementById("no-results-msg");
+        if (visibleCount === 0 && searchTerm.length > 0) {
+            if (!noResultsMsg) {
+                noResultsMsg = document.createElement("div");
+                noResultsMsg.id = "no-results-msg";
+                noResultsMsg.className = "text-muted text-center py-3";
+                noResultsMsg.innerHTML = "<em>No agents found matching your search</em>";
+                document.getElementById("agent-list").appendChild(noResultsMsg);
+            }
+            noResultsMsg.style.display = "block";
+        } else if (noResultsMsg) {
+            noResultsMsg.style.display = "none";
+        }
+    }
+    
+    function selectAllAgents() {
+        const visibleCheckboxes = document.querySelectorAll(".agent-item:not([style*=\"display: none\"]) .agent-checkbox");
+        visibleCheckboxes.forEach(function(checkbox) {
+            checkbox.checked = true;
+            // Add visual feedback
+            checkbox.parentElement.style.backgroundColor = "#e7f3ff";
+            setTimeout(() => {
+                checkbox.parentElement.style.backgroundColor = "";
+            }, 300);
+        });
+        updateSelectedCount();
+    }
+    
+    function deselectAllAgents() {
+        const checkboxes = document.querySelectorAll(".agent-checkbox");
+        checkboxes.forEach(function(checkbox) {
+            checkbox.checked = false;
+            // Add visual feedback
+            checkbox.parentElement.style.backgroundColor = "#ffe7e7";
+            setTimeout(() => {
+                checkbox.parentElement.style.backgroundColor = "";
+            }, 300);
+        });
+        updateSelectedCount();
+    }
+    
+    function updateSelectedCount() {
+        const selectedCount = document.querySelectorAll(".agent-checkbox:checked").length;
+        const totalCount = document.querySelectorAll(".agent-checkbox").length;
+        const searchBox = document.getElementById("agent-search");
+        
+        if (selectedCount > 0) {
+            searchBox.placeholder = `Search agents... (${selectedCount}/${totalCount} selected)`;
+            searchBox.style.borderColor = "#28a745";
+        } else {
+            searchBox.placeholder = `Search agents... (${totalCount} available)`;
+            searchBox.style.borderColor = "";
+        }
+    }
+    
+    // Add smooth checkbox interactions
+    document.addEventListener("change", function(e) {
+        if (e.target.classList.contains("agent-checkbox")) {
+            updateSelectedCount();
+            
+            // Add visual feedback for individual checkbox changes
+            const item = e.target.parentElement;
+            if (e.target.checked) {
+                item.style.backgroundColor = "#e7f3ff";
+                setTimeout(() => {
+                    item.style.backgroundColor = "";
+                }, 200);
+            }
+        }
+    });
+    
+    // Add keyboard navigation
+    document.addEventListener("keydown", function(e) {
+        if (e.target.id === "agent-search") {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                // Select first visible agent if Enter is pressed
+                const firstVisible = document.querySelector(".agent-item:not([style*=\"display: none\"]) .agent-checkbox");
+                if (firstVisible) {
+                    firstVisible.checked = !firstVisible.checked;
+                    firstVisible.dispatchEvent(new Event("change"));
+                }
+            }
+        }
+    });
+    
+    // Initialize on page load
+    document.addEventListener("DOMContentLoaded", function() {
+        updateSelectedCount();
+        
+        // Add focus to search box for better UX
+        setTimeout(() => {
+            const searchBox = document.getElementById("agent-search");
+            if (searchBox) {
+                searchBox.focus();
+            }
+        }, 500);
+    });
+    </script>';
+    
+    return $html;
+}
+
+// Empty arrays - all billing fields replaced with agent selection above
 $_input_descriptors1 = array();
-
-$_input_descriptors1[] = array( 'caption' => t('ContactInfo','PaymentMethod'), 'type' => 'text',
-                               'value' => ((isset($bi_paymentmethod)) ? $bi_paymentmethod : ''), 'name' => 'bi_paymentmethod' );
-$_input_descriptors1[] = array( 'caption' => t('ContactInfo','Cash'), 'type' => 'text',
-                               'value' => ((isset($bi_cash)) ? $bi_cash : ''), 'name' => 'bi_cash' );
-$_input_descriptors1[] = array( 'caption' => t('ContactInfo','CreditCardName'), 'type' => 'text',
-                               'value' => ((isset($bi_creditcardname)) ? $bi_creditcardname : ''), 'name' => 'bi_creditcardname' );
-$_input_descriptors1[] = array( 'caption' => t('ContactInfo','CreditCardNumber'), 'type' => 'text',
-                               'value' => ((isset($bi_creditcardnumber)) ? $bi_creditcardnumber : ''), 'name' => 'bi_creditcardnumber' );
-$_input_descriptors1[] = array( 'caption' => t('ContactInfo','CreditCardVerificationNumber'), 'type' => 'text',
-                               'value' => ((isset($bi_creditcardverification)) ? $bi_creditcardverification : ''), 'name' => 'bi_creditcardverification' );
-$_input_descriptors1[] = array( 'caption' => t('ContactInfo','CreditCardType'), 'type' => 'text',
-                               'type' => 'select', 'name' => 'bi_creditcardtype',
-                               'selected_value' => ((isset($bi_creditcardtype)) ? $bi_creditcardtype : ''),
-                               'options' => array( 'Other', 'VISA', 'MasterCard', 'Diners' ) );
-$_input_descriptors1[] = array( 'type' => 'text', 'caption' => t('ContactInfo','CreditCardExpiration'),
-                               'value' => ((isset($bi_creditcardexp)) ? $bi_creditcardexp : ''), 'name' => 'bi_creditcardexp' );
-
-
-
-$_input_descriptors3 = array();
-
-$_input_descriptors3[] = array(
-                                'type' => 'textarea',
-                                'name' => 'bi_notes',
-                                'caption' => t('ContactInfo','Notes'),
-                                'content' => ((isset($bi_notes)) ? $bi_notes : '')
-                             );
-
-$_input_descriptors3[] = array(
-                                    'type' => 'select',
-                                    'name' => 'bi_changeuserbillinfo',
-                                    'caption' => t('ContactInfo','EnableUserUpdate'),
-                                    'options' => array( "0" => "no", "1" => "yes" ),
-                                    'integer_value' => true,
-                                    'selected_value' => (isset($bi_changeuserbillinfo) && intval($bi_changeuserbillinfo) == 1) ? '1' : '0',
-                              );
-
-$_input_descriptors3[] = array( 'caption' => t('all','BillStatus'), 'type' => 'text',  'name' => 'bi_billstatus',
-                               'value' => ((isset($bi_billstatus)) ? $bi_billstatus : ''), 'disabled' => true );
-$_input_descriptors3[] = array( 'caption' => t('all','LastBill'), 'type' => 'text',  'name' => 'bi_lastbill',
-                               'value' => ((isset($bi_lastbill)) ? $bi_lastbill : ''), 'disabled' => true );
-$_input_descriptors3[] = array( 'caption' => t('all','NextBill'), 'type' => 'text',  'name' => 'bi_nextbill',
-                               'value' => ((isset($bi_nextbill)) ? $bi_nextbill : ''), 'disabled' => true );
-$_input_descriptors3[] = array( 'caption' => t('all','BillDue'), 'type' => 'text',  'name' => 'bi_billdue',
-                               'value' => ((isset($bi_billdue)) ? $bi_billdue : '') );
-$_input_descriptors3[] = array( 'caption' => t('all','NextInvoiceDue'), 'type' => 'text', 'name' => 'bi_nextinvoicedue',
-                               'value' => ((isset($bi_nextinvoicedue)) ? $bi_nextinvoicedue : '') );
-
-$_input_descriptors3[] = array( 'caption' => t('all','CreationDate'), 'type' => 'datetime-local', 'name' => 'bi_creationdate',
-                               'disabled' => true, 'value' =>((isset($bi_creationdate)) ? $bi_creationdate : '') );
-$_input_descriptors3[] = array( 'caption' => t('all','CreationBy'), 'type' => 'text', 'name' => 'bi_creationby',
-                               'disabled' => true, 'value' =>((isset($bi_creationby)) ? $bi_creationby : '') );
-$_input_descriptors3[] = array( 'caption' => t('all','UpdateDate'), 'type' => 'datetime-local', 'name' => 'bi_updatedate',
-                               'disabled' => true, 'value' =>((isset($bi_updatedate)) ? $bi_updatedate : '') );
-$_input_descriptors3[] = array( 'caption' => t('all','UpdateBy'), 'type' => 'text', 'name' => 'bi_updateby',
-                               'disabled' => true, 'value' =>((isset($bi_updateby)) ? $bi_updateby : '') );
-
-
 $_input_descriptors2 = array();
-
-$_input_descriptors2[] = array( 'type' => 'select', 'caption' => t('all','Lead'),
-                               'name' => 'bi_lead', 'selected_value' => ((isset($bi_lead)) ? $bi_lead : ''),
-                               'options' => array('Internet', 'Friend Referral', 'News Medium', 'Advertisment') );
-
-$_input_descriptors2[] = array( 'caption' => t('all','Coupon'), 'type' => 'text',
-                               'value' => ((isset($bi_coupon)) ? $bi_coupon : ''), 'name' => 'bi_coupon' );
-$_input_descriptors2[] = array( 'caption' => t('all','OrderTaker'), 'type' => 'text',
-                               'value' => ((isset($bi_ordertaker)) ? $bi_ordertaker : ''), 'name' => 'bi_ordertaker' );
+$_input_descriptors3 = array();
 
 // fieldset
 $_fieldset0_descriptor = array(
-                                "title" => "Billing Information",
+                                "title" => "Agent Assignment",
                               );
 
-open_fieldset($_fieldset0_descriptor);
-
-foreach ($_input_descriptors0 as $input_descriptor) {
-    print_form_component($input_descriptor);
+// Check if layout functions are available (they should be when included from mng-edit.php)
+if (function_exists('open_fieldset')) {
+    open_fieldset($_fieldset0_descriptor);
+    
+    if ($is_current_operator_agent) {
+        // For agent operators: show read-only assignment
+        echo '<div class="mb-1">';
+        echo '<label class="form-label mb-1">Assigned Agent</label>';
+        echo '<div class="alert alert-info">';
+        echo '<i class="bi bi-info-circle me-2"></i>';
+        echo '<strong>Auto-assigned:</strong> This user will be automatically assigned to your agent account.';
+        echo '</div>';
+        
+        // Get current agent name for display
+        $current_agent_name = '';
+        foreach ($agent_options as $id => $name) {
+            if ($id == $current_agent_id) {
+                $current_agent_name = $name;
+                break;
+            }
+        }
+        
+        echo '<div class="form-control-plaintext bg-light p-2 rounded border">';
+        echo '<i class="bi bi-person-check-fill text-success me-2"></i>';
+        echo '<strong>' . htmlspecialchars($current_agent_name) . '</strong>';
+        echo '</div>';
+        
+        // Hidden input to ensure the agent is selected
+        echo '<input type="hidden" name="selected_agents[]" value="' . $current_agent_id . '">';
+        echo '<div class="form-text">Users created by agent operators are automatically assigned to their agent account.</div>';
+        echo '</div>';
+    } else {
+        // For non-agent operators: show full selection
+        echo '<div class="mb-1">';
+        echo '<label class="form-label mb-1">Select Agents</label>';
+        echo generate_agent_checkboxes($agent_options, ((isset($selected_agents)) ? $selected_agents : array()));
+        echo '<div class="form-text">Select one or more agents to assign to this user</div>';
+        echo '</div>';
+    }
+    
+    close_fieldset();
+} else {
+    // Fallback for when layout functions are not available
+    echo '<div class="card">';
+    echo '<div class="card-header"><h5>Agent Assignment</h5></div>';
+    echo '<div class="card-body">';
+    
+    if ($is_current_operator_agent) {
+        // For agent operators: show read-only assignment
+        echo '<div class="mb-1">';
+        echo '<label class="form-label mb-1">Assigned Agent</label>';
+        echo '<div class="alert alert-info">';
+        echo '<i class="bi bi-info-circle me-2"></i>';
+        echo '<strong>Auto-assigned:</strong> This user will be automatically assigned to your agent account.';
+        echo '</div>';
+        
+        // Get current agent name for display
+        $current_agent_name = '';
+        foreach ($agent_options as $id => $name) {
+            if ($id == $current_agent_id) {
+                $current_agent_name = $name;
+                break;
+            }
+        }
+        
+        echo '<div class="form-control-plaintext bg-light p-2 rounded border">';
+        echo '<i class="bi bi-person-check-fill text-success me-2"></i>';
+        echo '<strong>' . htmlspecialchars($current_agent_name) . '</strong>';
+        echo '</div>';
+        
+        // Hidden input to ensure the agent is selected
+        echo '<input type="hidden" name="selected_agents[]" value="' . $current_agent_id . '">';
+        echo '<div class="form-text">Users created by agent operators are automatically assigned to their agent account.</div>';
+        echo '</div>';
+    } else {
+        // For non-agent operators: show full selection
+        echo '<div class="mb-1">';
+        echo '<label class="form-label mb-1">Select Agents</label>';
+        echo generate_agent_checkboxes($agent_options, ((isset($selected_agents)) ? $selected_agents : array()));
+        echo '<div class="form-text">Select one or more agents to assign to this user</div>';
+        echo '</div>';
+    }
+    
+    echo '</div>';
+    echo '</div>';
 }
-
-close_fieldset();
-
-unset($_input_descriptors0);
-
-// fieldset
-$_fieldset1_descriptor = array(
-                                "title" => "Payment Details",
-                              );
-
-open_fieldset($_fieldset1_descriptor);
-
-foreach ($_input_descriptors1 as $input_descriptor) {
-    print_form_component($input_descriptor);
-}
-
-close_fieldset();
-
-unset($_input_descriptors1);
-
-// fieldset
-$_fieldset2_descriptor = array(
-                                "title" => "Promotion Details",
-                              );
-
-open_fieldset($_fieldset2_descriptor);
-
-foreach ($_input_descriptors2 as $input_descriptor) {
-    print_form_component($input_descriptor);
-}
-
-close_fieldset();
-
-unset($_input_descriptors2);
-
-// fieldset
-$_fieldset3_descriptor = array(
-                                "title" => "Other",
-                              );
-
-open_fieldset($_fieldset3_descriptor);
-
-foreach ($_input_descriptors3 as $input_descriptor) {
-    print_form_component($input_descriptor);
-}
-
-close_fieldset();
-
-unset($_input_descriptors3);

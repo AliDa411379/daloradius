@@ -30,6 +30,8 @@
     include_once("lang/main.php");
     include_once("../common/includes/validation.php");
     include("../common/includes/layout.php");
+    include_once("include/management/functions.php");
+    include_once("library/agent_functions.php");
 
     // init logging variables
     $log = "visited page: ";
@@ -43,9 +45,9 @@
 
     // print HTML prologue
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/ajaxGeneric.js",
-        "static/js/pages_common.js"
+        "../common/static/js/ajax.js",
+        "../common/static/js/ajaxGeneric.js",
+        "../common/static/js/pages_common.js"
     );
 
     $title = t('Intro','mnglistall.php');
@@ -75,6 +77,7 @@
 
     $cols["lastlogin"] = t('all','LastLoginTime');
     $cols[] = t('title','Groups');
+    $cols[] = "Agents";
 
     $colspan = count($cols);
     $half_colspan = intval($colspan / 2);
@@ -97,7 +100,7 @@
     include('../common/includes/db_open.php');
     include('include/management/pages_common.php');
 
-    // sql where is like: join_condition AND (nested_condition1)
+    // sql where is like: join_condition AND (nested_condition1) AND (agent_condition if applicable)
 
     // init nested condition 1
     $nested_condition1 = array( "rc.attribute='Auth-Type'", "rc.attribute LIKE '%%-Password'" );
@@ -107,6 +110,13 @@
 
     // imploding nested condition 1
     $sql_WHERE[] = sprintf("(%s)", implode(" OR ", $nested_condition1));
+    
+    // Add agent filtering if current operator is an agent
+    $agent_filtering_applied = addAgentFilteringToUserQuery($dbSocket, $operator, $configValues, $sql_WHERE, 'ui');
+    if ($agent_filtering_applied) {
+        $logQuery = "performed query for agent's own users on page: ";
+        displayAgentNotice();
+    }
 
     // setup php session variables for exporting
     $_SESSION['reportTable'] = sprintf("%s AS rc LEFT JOIN %s AS ra ON ra.username=rc.username, %s AS ui",
@@ -336,6 +346,10 @@
 
             $table_row[] = $lastlogin;
             $table_row[] = $grouplist;
+            
+            // get and add agent information
+            $agent_info = get_user_agents_string($dbSocket, $username);
+            $table_row[] = htmlspecialchars($agent_info, ENT_QUOTES, 'UTF-8');
 
             // print table row
             print_table_row($table_row);

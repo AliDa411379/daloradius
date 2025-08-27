@@ -52,13 +52,13 @@ include('../common/includes/db_close.php');
     <meta name="copyright" content="Liran Tal & Filippo Lauria">
     <meta name="robots" content="noindex">
 
-    <link rel="apple-touch-icon" sizes="180x180" href="static/images/favicon/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="static/images/favicon/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="static/images/favicon/favicon-16x16.png">
-    <link rel="manifest" href="static/images/favicon/site.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="../common/static/images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../common/static/images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../common/static/images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="../common/static/images/favicon/site.webmanifest">
 
-    <link rel="stylesheet" href="static/css/bootstrap.min.css">
-    <link rel="stylesheet" href="static/css/icons/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="../common/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../common/static/css/icons/bootstrap-icons.min.css">
 
         <style>
 html, body {
@@ -70,7 +70,7 @@ body {
   align-items: center;
   padding-top: 40px;
   padding-bottom: 40px;
-  background-color: #f5f5f5;
+  background: linear-gradient(135deg, #5e1b97 0%, #4b1478 100%);
 }
 
 .form-login {
@@ -141,10 +141,12 @@ EOF;
         <label for="language"><?= t('all','Language') ?></label>
     </div>
 
-    <button class="w-100 btn btn-lg btn-success mb-4" type="submit"><?= t('text','LoginPlease') ?></button>
+    <button class="w-100 btn btn-lg btn-warning mb-4" type="submit" style="background-color:#d4a85d;border-color:#d4a85d;color:#2b1e08;">
+        <?= t('text','LoginPlease') ?>
+    </button>
 
     <div class="d-flex justify-content-center align-items-center user-select-none">
-        <img src="static/images/daloradius_small.png" alt="daloRADIUS Logo" width="128">
+        <img src="../operators/static/images/samanet-logo.png" alt="Samanet Logo" style="height:48px; width:auto;">
     </div>
 
     <input name="csrf_token" type="hidden" value="<?= dalo_csrf_token() ?>">
@@ -198,7 +200,7 @@ EOF;
 
     </main>
 
-    <script src="static/js/bootstrap.bundle.min.js"></script>
+    <script src="../common/static/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

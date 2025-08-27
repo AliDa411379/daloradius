@@ -51,35 +51,63 @@
             
                 include('../common/includes/db_open.php');
                 
-                // Get agent name for logging
-                $sql = "SELECT name FROM " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " WHERE id = ?";
-                $prep = $dbSocket->prepare($sql);
-                $prep->bind_param('i', $agent_id);
-                $prep->execute();
-                $prep->bind_result($agent_name);
-                
-                if ($prep->fetch()) {
-                    $prep->close();
-                    
-                    // Delete the agent
-                    $sql = "DELETE FROM " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " WHERE id = ?";
-                    $prep = $dbSocket->prepare($sql);
-                    $prep->bind_param('i', $agent_id);
-                    $res = $prep->execute();
-                    
-                    if ($res && $prep->affected_rows > 0) {
-                        $successMsg = "Successfully deleted agent: <strong>" . htmlspecialchars($agent_name, ENT_QUOTES, 'UTF-8') . "</strong>";
-                        $logAction .= "Successfully deleted agent [$agent_name] on page: ";
-                    } else {
-                        $failureMsg = "Error deleting agent or agent not found";
-                        $logAction .= "Failed deleting agent [$agent_name] on page: ";
-                    }
-                    
-                    $prep->close();
+                // Get agent name for logging (PEAR DB style)
+                $sql = "SELECT name FROM " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " WHERE id = ? AND is_deleted = 0";
+                $stmt = $dbSocket->prepare($sql);
+                if (DB::isError($stmt)) {
+                    $failureMsg = "Database prepare failed: " . $stmt->getMessage();
+                    $logAction .= "Database prepare failed on page: ";
                 } else {
-                    $prep->close();
-                    $failureMsg = "Agent not found";
-                    $logAction .= "Failed deleting agent (agent not found) on page: ";
+                    $res = $dbSocket->execute($stmt, array($agent_id));
+                    if (DB::isError($res)) {
+                        $failureMsg = "Database execute failed: " . $res->getMessage();
+                        $logAction .= "Database execute failed on page: ";
+                    } else {
+                        $row = $res->fetchRow();
+                        if ($row) {
+                            $agent_name = $row[0];
+                            
+                            // Soft delete the agent (mark as deleted)
+                            $sql2 = "UPDATE " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " SET is_deleted = 1 WHERE id = ?";
+                            $stmt2 = $dbSocket->prepare($sql2);
+                            if (DB::isError($stmt2)) {
+                                $failureMsg = "Database prepare failed: " . $stmt2->getMessage();
+                                $logAction .= "Database prepare failed on page: ";
+                            } else {
+                                $res2 = $dbSocket->execute($stmt2, array($agent_id));
+                                if (!DB::isError($res2) && $dbSocket->affectedRows() > 0) {
+                                    // Also mark the associated operator as deleted
+                                    $sql3 = "UPDATE " . $configValues['CONFIG_DB_TBL_DALOOPERATORS'] . " SET is_deleted = 1 WHERE is_agent = 1 AND (company = ? OR email1 = ?)";
+                                    $stmt3 = $dbSocket->prepare($sql3);
+                                    if (!DB::isError($stmt3)) {
+                                        // Get agent details to match with operator
+                                        $sql_agent = "SELECT company, email FROM " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " WHERE id = ?";
+                                        $stmt_agent = $dbSocket->prepare($sql_agent);
+                                        if (!DB::isError($stmt_agent)) {
+                                            $res_agent = $dbSocket->execute($stmt_agent, array($agent_id));
+                                            if (!DB::isError($res_agent)) {
+                                                $agent_row = $res_agent->fetchRow();
+                                                if ($agent_row) {
+                                                    $agent_company = $agent_row[0];
+                                                    $agent_email = $agent_row[1];
+                                                    $dbSocket->execute($stmt3, array($agent_company, $agent_email));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    $successMsg = "Successfully deleted agent: <strong>" . htmlspecialchars($agent_name, ENT_QUOTES, 'UTF-8') . "</strong>";
+                                    $logAction .= "Successfully deleted agent [$agent_name] on page: ";
+                                } else {
+                                    $failureMsg = "Error deleting agent or agent not found";
+                                    $logAction .= "Failed deleting agent [$agent_name] on page: ";
+                                }
+                            }
+                        } else {
+                            $failureMsg = "Agent not found";
+                            $logAction .= "Failed deleting agent (agent not found) on page: ";
+                        }
+                    }
                 }
                 
                 include('../common/includes/db_close.php');
@@ -90,22 +118,32 @@
             }
         }
         
-        // Load agent data for confirmation
+        // Load agent data for confirmation (PEAR DB style)
         if (!isset($successMsg)) {
             include('../common/includes/db_open.php');
-            $sql = "SELECT name, company, phone, email, city, country FROM " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " WHERE id = ?";
-            $prep = $dbSocket->prepare($sql);
-            $prep->bind_param('i', $agent_id);
-            $prep->execute();
-            $prep->bind_result($agent_name, $company, $phone, $email, $city, $country);
-            
-            if (!$prep->fetch()) {
-                $failureMsg = "Agent not found";
-                $logAction .= "Failed deleting agent (agent not found) on page: ";
+            $sql = "SELECT name, company, phone, email, city, country FROM " . $configValues['CONFIG_DB_TBL_DALOAGENTS'] . " WHERE id = ? AND is_deleted = 0";
+            $stmt = $dbSocket->prepare($sql);
+            if (DB::isError($stmt)) {
+                $failureMsg = "Database prepare failed: " . $stmt->getMessage();
+                $logAction .= "Database prepare failed on page: ";
                 $agent_name = $company = $phone = $email = $city = $country = "";
+            } else {
+                $res = $dbSocket->execute($stmt, array($agent_id));
+                if (DB::isError($res)) {
+                    $failureMsg = "Database execute failed: " . $res->getMessage();
+                    $logAction .= "Database execute failed on page: ";
+                    $agent_name = $company = $phone = $email = $city = $country = "";
+                } else {
+                    $row = $res->fetchRow();
+                    if (!$row) {
+                        $failureMsg = "Agent not found";
+                        $logAction .= "Failed deleting agent (agent not found) on page: ";
+                        $agent_name = $company = $phone = $email = $city = $country = "";
+                    } else {
+                        list($agent_name, $company, $phone, $email, $city, $country) = $row;
+                    }
+                }
             }
-            
-            $prep->close();
             include('../common/includes/db_close.php');
         }
     }
@@ -188,8 +226,8 @@
 ?>
     <div class="text-center">
         <br/>
-        <a href="config-agents-list.php" class="button"><?= t('button','ListAgents') ?></a>
-        <a href="config-agents-new.php" class="button"><?= t('button','NewAgent') ?></a>
+        <a href="mng-agents-list.php" class="button"><?= t('button','ListAgents') ?></a>
+        <a href="mng-agent-new.php" class="button"><?= t('button','NewAgent') ?></a>
     </div>
 <?php
     }

@@ -378,8 +378,8 @@ function printTableHead($cols, $orderBy="", $orderType="asc", $partial_query_str
             $href_desc = sprintf($href_format, $param, 'desc');
 
             //~ $img_format = '<img src="%s" alt="%s">';
-            //~ $img_asc = sprintf($img_format, 'static/images/icons/arrow_up.png', '^');
-            //~ $img_desc = sprintf($img_format, 'static/images/icons/arrow_down.png', 'v');
+            //~ $img_asc = sprintf($img_format, '../common/static/images/icons/arrow_up.png', '^');
+            //~ $img_desc = sprintf($img_format, '../common/static/images/icons/arrow_down.png', 'v');
 
             $img_format = '<i class="bi bi-%s ms-1 text-dark"></i>';
             $img_asc = sprintf($img_format, 'sort-alpha-up');

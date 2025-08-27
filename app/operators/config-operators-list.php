@@ -50,6 +50,7 @@
     
     $cols["fullname"] = "Full name";
     $cols["title"] = "Title";
+    $cols["is_agent"] = "Agent";
     
     
     $colspan = count($cols);
@@ -81,7 +82,7 @@
     include('include/management/pages_common.php');
 
     // we use this simplified query just to initialize $numrows
-    $sql = sprintf("SELECT COUNT(id) FROM %s", $configValues['CONFIG_DB_TBL_DALOOPERATORS']);
+    $sql = sprintf("SELECT COUNT(id) FROM %s WHERE is_deleted = 0", $configValues['CONFIG_DB_TBL_DALOOPERATORS']);
     $res = $dbSocket->query($sql);
     $numrows = $res->fetchrow()[0];
     
@@ -98,8 +99,8 @@
         /* END */
         
         // we execute and log the actual query
-        $sql = sprintf("SELECT id, username, password AS auth, CONCAT(firstname, ' ', lastname) AS fullname, title
-                          FROM %s", $configValues['CONFIG_DB_TBL_DALOOPERATORS']);
+        $sql = sprintf("SELECT id, username, password AS auth, CONCAT(firstname, ' ', lastname) AS fullname, title, is_agent
+                          FROM %s WHERE is_deleted = 0", $configValues['CONFIG_DB_TBL_DALOOPERATORS']);
         $sql .= sprintf(" ORDER BY %s %s LIMIT %s, %s", $orderBy, $orderType, $offset, $rowsPerPage);
         $res = $dbSocket->query($sql);
         $logDebugSQL .= "$sql;\n";
@@ -145,11 +146,14 @@
                 $row[$i] = htmlspecialchars($row[$i], ENT_QUOTES, 'UTF-8');
             }
             
-            list($id, $username, $auth, $fullname, $title) = $row;
+            list($id, $username, $auth, $fullname, $title, $is_agent) = $row;
             
             if (strtolower($configValues['CONFIG_IFACE_PASSWORD_HIDDEN']) === "yes") {
                 $auth = "[Password is hidden]";
             }
+            
+            // Format agent status
+            $agent_status = ($is_agent == 1) ? "Yes" : "No";
             
             // preparing checkboxes and tooltips stuff
             $tooltip = array(
@@ -166,7 +170,7 @@
             $checkbox = get_checkbox_str($d);
 
             // build table row
-            $table_row = array( $checkbox, $tooltip, $auth, $fullname, $title );
+            $table_row = array( $checkbox, $tooltip, $auth, $fullname, $title, $agent_status );
 
             // print table row
             print_table_row($table_row);

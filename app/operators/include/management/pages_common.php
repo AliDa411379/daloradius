@@ -137,7 +137,7 @@ function time2str($time, $abbreviate = false) {
 
 // return next billing date (Y-m-d format) based on
 // the billing recurring period and billing schedule type
-function getNextBillingDate($planRecurringBillingSchedule = "Fixed", $planRecurringPeriod, $billDates = null) {
+function getNextBillingDate($planRecurringPeriod, $planRecurringBillingSchedule = "Fixed", $billDates = null) {
 
     // initialize next bill date string (Y-m-d style)
 
@@ -238,7 +238,7 @@ function getNextBillingDate($planRecurringBillingSchedule = "Fixed", $planRecurr
 
 // return prev/start billing date (Y-m-d format) based on
 // the billing recurring period and billing schedule type
-function getPrevBillingDate($planRecurringBillingSchedule = "Fixed", $planRecurringPeriod, $billDates = null) {
+function getPrevBillingDate($planRecurringPeriod, $planRecurringBillingSchedule = "Fixed", $billDates = null) {
 
     // initialize next bill date string (Y-m-d style)
 

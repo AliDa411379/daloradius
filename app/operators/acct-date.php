@@ -78,9 +78,9 @@
 
     // print HTML prologue
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/ajaxGeneric.js",
-        "static/js/pages_common.js",
+        "../common/static/js/ajax.js",
+        "../common/static/js/ajaxGeneric.js",
+        "../common/static/js/pages_common.js",
     );
 
     $title = t('Intro','acctdate.php');

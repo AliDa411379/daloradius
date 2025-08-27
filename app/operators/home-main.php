@@ -35,6 +35,7 @@
     include implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_INCLUDE_MANAGEMENT'], 'functions.php' ]);
     include implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_INCLUDE_MANAGEMENT'], 'pages_common.php' ]);
     include implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'db_open.php' ]);
+    include_once implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_LIBRARY'], 'agent_functions.php' ]);
 
     // setting table-related parameters first
     $tableSetting = [
@@ -56,7 +57,14 @@
     print_html_prologue($title, $langCode);
 
     // Consolidated SQL queries
-    $total_users = count_users($dbSocket);
+    // If current operator is an agent, count only their users
+    $operator_id = $_SESSION['operator_id'];
+    $is_current_operator_agent = isCurrentOperatorAgent($dbSocket, $operator_id, $configValues);
+
+    $total_users = $is_current_operator_agent
+        ? count_users($dbSocket, true, $operator)
+        : count_users($dbSocket);
+
     $total_hotspots = count_hotspots($dbSocket);
     $total_nas = count_nas($dbSocket);
     $total_agents = count_agents($dbSocket);
@@ -174,18 +182,68 @@ HTML;
     
     // Print cards using parameters
     echo '<div class="row mb-4">';
-    foreach ($card_params as $params) {
-        echo generateCard($params["title"], $params["total"], $params["linkText"], $params["linkURL"], $params["bgColor"], $params["icon"]);
+
+    if ($is_current_operator_agent) {
+        // Render only Users card for agents
+        echo generateCard(
+            t('submenu', 'Users'),
+            sprintf("%s: <strong>%d</strong>", t('all', 'Total'), $total_users),
+            "Go to users list",
+            "mng-list-all.php",
+            "success",
+            "people-fill"
+        );
+    } else {
+        foreach ($card_params as $params) {
+            echo generateCard($params["title"], $params["total"], $params["linkText"], $params["linkURL"], $params["bgColor"], $params["icon"]);
+        }
+        // Add Nodes card
+        echo generateCard(
+            'Nodes',
+            sprintf('%s: <strong>%d</strong>', t('all','Total'), count_nodes($dbSocket)),
+            'Go to nodes list',
+            'mng-nodes-list.php',
+            'secondary',
+            'server'
+        );
     }
+
     echo '</div>';
+
+    // Agent notice for clarity when filtered
+    if ($is_current_operator_agent) {
+        echo '<div class="row mb-3"><div class="col-12">';
+        echo '<div class="alert alert-info py-2"><i class="bi bi-info-circle me-2"></i>';
+        echo 'Agent view: showing only users created by your account.';
+        echo '</div></div></div>';
+    }
 
     ////////////////////////////////////////
 
     echo '<div class="row mb-4">';
 
-    $sql = sprintf("SELECT %s AS `username`, reply, %s AS `datetime` FROM %s ORDER BY `datetime` DESC LIMIT 10",
-                   $tableSetting['postauth']['user'], $tableSetting['postauth']['date'],
-                   $configValues['CONFIG_DB_TBL_RADPOSTAUTH']);
+    // Last Connection Attempts - filter by agent's users if agent
+    if ($is_current_operator_agent) {
+        $sql = sprintf(
+            "SELECT p.%s AS `username`, p.reply, p.%s AS `datetime`
+             FROM %s p
+             INNER JOIN %s ui ON ui.username = p.%s
+             WHERE ui.creationby = '%s'
+             ORDER BY `datetime` DESC LIMIT 10",
+            $tableSetting['postauth']['user'],
+            $tableSetting['postauth']['date'],
+            $configValues['CONFIG_DB_TBL_RADPOSTAUTH'],
+            $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+            $tableSetting['postauth']['user'],
+            $dbSocket->escapeSimple($operator)
+        );
+    } else {
+        $sql = sprintf(
+            "SELECT %s AS `username`, reply, %s AS `datetime` FROM %s ORDER BY `datetime` DESC LIMIT 10",
+            $tableSetting['postauth']['user'], $tableSetting['postauth']['date'],
+            $configValues['CONFIG_DB_TBL_RADPOSTAUTH']
+        );
+    }
     $res = $dbSocket->query($sql);
     $numrows = $res->numRows();
 
@@ -217,10 +275,28 @@ HTML;
     }
 
     echo '</div>';
-    $sql = sprintf("SELECT `username`, `acctstarttime` FROM %s
-                     WHERE `acctstoptime` IS NULL OR `acctstoptime`='0000-00-00 00:00:00'
-                     ORDER BY `acctstarttime` DESC LIMIT 10",
-                   $configValues['CONFIG_DB_TBL_RADACCT']);
+
+    // Currently online - filter by agent's users if agent
+    if ($is_current_operator_agent) {
+        $sql = sprintf(
+            "SELECT ra.username, ra.acctstarttime
+             FROM %s ra
+             INNER JOIN %s ui ON ui.username = ra.username
+             WHERE (ra.acctstoptime IS NULL OR ra.acctstoptime='0000-00-00 00:00:00')
+               AND ui.creationby = '%s'
+             ORDER BY ra.acctstarttime DESC LIMIT 10",
+            $configValues['CONFIG_DB_TBL_RADACCT'],
+            $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+            $dbSocket->escapeSimple($operator)
+        );
+    } else {
+        $sql = sprintf(
+            "SELECT `username`, `acctstarttime` FROM %s
+             WHERE `acctstoptime` IS NULL OR `acctstoptime`='0000-00-00 00:00:00'
+             ORDER BY `acctstarttime` DESC LIMIT 10",
+            $configValues['CONFIG_DB_TBL_RADACCT']
+        );
+    }
     $res = $dbSocket->query($sql);
     $numrows = $res->numRows();
 
@@ -251,15 +327,38 @@ HTML;
     <div class="row">
 HTML;
 
-    $sql = sprintf("SELECT DISTINCT(ra.username) AS `username`, 
+    // Last month top users - filter by agent's users if agent
+    if ($is_current_operator_agent) {
+        $sql = sprintf(
+            "SELECT DISTINCT(ra.username) AS `username`, 
                     SUM(ra.AcctSessionTime) AS `session_time`,
                     SUM(ra.AcctInputOctets) AS `uploaded_bytes`, 
                     SUM(ra.AcctOutputOctets) AS `downloaded_bytes`
-                    FROM %s AS ra 
-                    WHERE ra.acctstarttime >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) 
-                    GROUP BY `username` 
-                    ORDER BY `session_time` DESC 
-                    LIMIT 10", $configValues['CONFIG_DB_TBL_RADACCT']);
+             FROM %s AS ra
+             INNER JOIN %s ui ON ui.username = ra.username
+             WHERE ra.acctstarttime >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)
+               AND ui.creationby = '%s'
+             GROUP BY `username`
+             ORDER BY `session_time` DESC
+             LIMIT 10",
+            $configValues['CONFIG_DB_TBL_RADACCT'],
+            $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+            $dbSocket->escapeSimple($operator)
+        );
+    } else {
+        $sql = sprintf(
+            "SELECT DISTINCT(ra.username) AS `username`, 
+                    SUM(ra.AcctSessionTime) AS `session_time`,
+                    SUM(ra.AcctInputOctets) AS `uploaded_bytes`, 
+                    SUM(ra.AcctOutputOctets) AS `downloaded_bytes`
+             FROM %s AS ra 
+             WHERE ra.acctstarttime >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH) 
+             GROUP BY `username` 
+             ORDER BY `session_time` DESC 
+             LIMIT 10",
+            $configValues['CONFIG_DB_TBL_RADACCT']
+        );
+    }
     $res = $dbSocket->query($sql);
     $numrows = $res->numRows();
 

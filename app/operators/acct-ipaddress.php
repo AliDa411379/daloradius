@@ -75,8 +75,8 @@
     
     // print HTML prologue
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/ajaxGeneric.js",
+        "../common/static/js/ajax.js",
+        "../common/static/js/ajaxGeneric.js",
     );
     
     $title = t('Intro','acctipaddress.php');

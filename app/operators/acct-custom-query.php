@@ -88,7 +88,7 @@
     $accounting_custom_value = $where_value_enc;
 
     // print HTML prologue
-    $extra_js = [ "static/js/ajax.js", "static/js/ajaxGeneric.js", ];
+    $extra_js = [ "../common/static/js/ajax.js", "../common/static/js/ajaxGeneric.js", ];
 
     $title = t('Intro','acctcustomquery.php');
     $help = t('helpPage','acctcustomquery');

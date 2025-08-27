@@ -52,12 +52,12 @@ $dir = (strtolower($langCode) === 'ar') ? "rtl" : "ltr";
     <meta name="copyright" content="Liran Tal & Filippo Lauria">
     <meta name="robots" content="noindex">
 
-    <link rel="apple-touch-icon" sizes="180x180" href="static/images/favicon/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="static/images/favicon/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="static/images/favicon/favicon-16x16.png">
-    <link rel="manifest" href="static/images/favicon/site.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="../common/static/images/favicon/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="../common/static/images/favicon/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="../common/static/images/favicon/favicon-16x16.png">
+    <link rel="manifest" href="../common/static/images/favicon/site.webmanifest">
 
-    <link rel="stylesheet" href="static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="../common/static/css/bootstrap.min.css">
     
     <style>
 html, body {
@@ -69,7 +69,7 @@ body {
   align-items: center;
   padding-top: 40px;
   padding-bottom: 40px;
-  background-color: #f5f5f5;
+  background: linear-gradient(135deg, #5e1b97 0%, #4b1478 100%);
 }
 
 .form-login {
@@ -104,7 +104,7 @@ body {
 <body>
     <main class="form-login w-100 m-auto">
     <form action="dologin.php" method="POST">
-    <img class="mb-4" src="static/images/daloradius_small.png" alt="daloRADIUS" width="135" height="41">
+    <img class="mb-4" src="../operators/static/images/samanet-logo.png" alt="Samanet" style="height:48px; width:auto;">
     <h1 class="h3 mb-3 fw-normal"><?= t('text','LoginRequired') ?></h1>
 
     <div class="form-floating">
@@ -135,8 +135,8 @@ body {
         <label for="location">Location</label>
     </div>
                     
-    <button class="w-100 btn btn-lg btn-primary" type="submit"><?= t('text','LoginPlease') ?></button>
-    <small class="my-2 text-muted text-center d-block"><?= t('all','daloRADIUS') ?></small>
+    <button class="w-100 btn btn-lg btn-warning" type="submit" style="background-color:#d4a85d;border-color:#d4a85d;color:#2b1e08;"><?= t('text','LoginPlease') ?></button>
+    <small class="my-2 text-white-50 text-center d-block">Samanet Portal</small>
     
     <input name="csrf_token" type="hidden" value="<?= dalo_csrf_token() ?>">
     </form>
@@ -172,7 +172,7 @@ EOF;
   
     </main>
 
-    <script src="static/js/bootstrap.bundle.min.js"></script>
+    <script src="../common/static/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>

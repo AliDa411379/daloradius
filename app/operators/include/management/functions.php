@@ -28,6 +28,10 @@ if (strpos($_SERVER['PHP_SELF'], '/include/management/functions.php') !== false)
     exit;
 }
 
+// prevent function redeclaration
+if (!defined('MANAGEMENT_FUNCTIONS_INCLUDED')) {
+    define('MANAGEMENT_FUNCTIONS_INCLUDED', true);
+
 
 // add invoice items contained in the $_POST array.
 // a single items is an associatime array starting with the string 'item'
@@ -550,12 +554,22 @@ function count_sql($dbSocket, $sql) {
  * @param object $dbSocket The database connection object with a query() method.
  * @return int The number of distinct users.
  */
-function count_users($dbSocket) {
+function count_users($dbSocket, $only_current_agent = false, $operator_username = null) {
     global $configValues;
 
-    $sql = sprintf("SELECT COUNT(DISTINCT `ui`.`username`) FROM %s AS `rc`, %s AS `ui`
-                    WHERE `ui`.`username`=`rc`.`username` AND (`rc`.`attribute`='Auth-Type' OR `rc`.`attribute` LIKE '%%-Password')",
-                    $configValues['CONFIG_DB_TBL_RADCHECK'], $configValues['CONFIG_DB_TBL_DALOUSERINFO']);
+    $where = "WHERE `ui`.`username`=`rc`.`username` AND (`rc`.`attribute`='Auth-Type' OR `rc`.`attribute` LIKE '%-Password')";
+
+    // If filtering by current agent, restrict by creationby
+    if ($only_current_agent && !empty($operator_username)) {
+        $where .= sprintf(" AND ui.creationby = '%s'", $dbSocket->escapeSimple($operator_username));
+    }
+
+    $sql = sprintf(
+        "SELECT COUNT(DISTINCT `ui`.`username`) FROM %s AS `rc`, %s AS `ui` %s",
+        $configValues['CONFIG_DB_TBL_RADCHECK'],
+        $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+        $where
+    );
     return count_sql($dbSocket, $sql);
 }
 
@@ -591,8 +605,17 @@ function count_nas($dbSocket) {
  */
 function count_agents($dbSocket) {
     global $configValues;
-    $sql = sprintf("SELECT COUNT(`id`) FROM %s", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
+    $sql = sprintf("SELECT COUNT(`id`) FROM %s WHERE is_deleted = 0", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
     return count_sql($dbSocket, $sql);  
+}
+
+/**
+ * Counts the number of nodes in the database.
+ * Uses existing `node` table populated by API collectors.
+ */
+function count_nodes($dbSocket) {
+    $sql = "SELECT COUNT(*) FROM node";
+    return count_sql($dbSocket, $sql);
 }
 
 /**
@@ -612,3 +635,78 @@ function count_agents($dbSocket) {
 function get_numrows($dbSocket, $query) {
     return $dbSocket->query($query)->fetchrow()[0];
 }
+
+/**
+ * Get agents assigned to a user
+ *
+ * @param object $dbSocket The database connection object
+ * @param string $username The username to get agents for
+ * @return array Array of agent information (id, name, company)
+ */
+function get_user_agents($dbSocket, $username) {
+    global $configValues, $logDebugSQL;
+    
+    $agents = array();
+    
+    // Get user_id first
+    $sql = sprintf("SELECT id FROM userinfo WHERE username='%s'", 
+                   $dbSocket->escapeSimple($username));
+    $res = $dbSocket->query($sql);
+    $logDebugSQL .= "$sql;\n";
+    
+    if ($res && $row = $res->fetchRow()) {
+        $user_id = $row[0];
+        
+        // Get assigned agents with their details
+        $sql = sprintf("SELECT a.id, a.name, a.company, a.email, a.phone 
+                        FROM %s a 
+                        INNER JOIN user_agent ua ON a.id = ua.agent_id 
+                        WHERE ua.user_id = %d AND a.is_deleted = 0
+                        ORDER BY a.name", 
+                       $configValues['CONFIG_DB_TBL_DALOAGENTS'], 
+                       intval($user_id));
+        $res = $dbSocket->query($sql);
+        $logDebugSQL .= "$sql;\n";
+        
+        while ($row = $res->fetchRow()) {
+            $agents[] = array(
+                'id' => $row[0],
+                'name' => $row[1],
+                'company' => $row[2],
+                'email' => $row[3],
+                'phone' => $row[4]
+            );
+        }
+    }
+    
+    return $agents;
+}
+
+/**
+ * Get formatted string of user agents for display
+ *
+ * @param object $dbSocket The database connection object
+ * @param string $username The username to get agents for
+ * @return string Formatted string of agent names
+ */
+function get_user_agents_string($dbSocket, $username) {
+    $agents = get_user_agents($dbSocket, $username);
+    
+    if (empty($agents)) {
+        return "No agents assigned";
+    }
+    
+    $agent_names = array();
+    foreach ($agents as $agent) {
+        $display_name = $agent['name'];
+        if (!empty($agent['company'])) {
+            $display_name .= " (" . $agent['company'] . ")";
+        }
+        $agent_names[] = $display_name;
+    }
+    
+    return implode(", ", $agent_names);
+}
+
+} // end of include guard
+

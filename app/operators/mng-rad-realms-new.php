@@ -137,7 +137,7 @@
     $extra_css = array();
     
     $extra_js = array(
-        "static/js/pages_common.js",
+        "../common/static/js/pages_common.js",
     );
     
     $title = t('Intro','mngradrealmsnew.php');

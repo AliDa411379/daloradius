@@ -384,6 +384,7 @@ $l['all']['PlanName'] = "Plan Name";
 $l['all']['PlanId'] = "Plan Id";
 
 $l['all']['UserId'] = "User Id";
+$l['all']['Agent'] = "Agent";
 
 $l['all']['Invoice'] = "Invoice";
 $l['all']['InvoiceID'] = "Invoice ID";

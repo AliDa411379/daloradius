@@ -49,7 +49,7 @@ if (!in_array($detect_category, array_keys($nav))) {
     <div class="row p-2">
         <div class="d-flex align-items-center justify-content-center justify-content-lg-start">
             <a href="index.php" class="d-flex align-items-center mb-1 mb-lg-0 text-dark text-decoration-none">
-                <img src="static/images/daloradius_small.png">
+                <img src="../common/static/images/daloradius_small.png">
             </a>
       
             <ul class="nav col-12 col-lg-auto mx-2 me-lg-auto mb-1 justify-content-center mb-md-0">

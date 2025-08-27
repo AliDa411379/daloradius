@@ -34,16 +34,16 @@ function fix_placeholder_text($text) {
 }
 
 const DEFAULT_COMMON_PROLOGUE_CSS = array(
-    "static/css/bootstrap.min.css",
-    "static/css/icons/bootstrap-icons.min.css",
+    "../common/static/css/bootstrap.min.css",
+    "../common/static/css/icons/bootstrap-icons.min.css",
 );
 
 const DEFAULT_COMMON_PROLOGUE_JS = array(
-    "static/js/pages_common.js",
+    "../common/static/js/pages_common.js",
 );
 
 const DEFAULT_COMMON_EPILOGUE_JS = array(
-    "static/js/bootstrap.bundle.min.js",
+    "../common/static/js/bootstrap.bundle.min.js",
 );
 
 
@@ -80,6 +80,9 @@ function print_html_prologue($title, $lang='en', $extra_css=array(), $extra_js=a
 <link rel="manifest" href="static/images/favicon/site.webmanifest">
 
 EOF;
+
+    // Append custom theme
+    $extra_css[] = "static/css/custom-theme.css";
 
     $css = array_merge($common_css, $extra_css);
     foreach ($css as $href) {
@@ -158,7 +161,7 @@ EOF;
         <div class="p-4 text-center text-bg-light border-top border-bottom">
             <div class="d-flex align-items-center">
                 <div class="flex-shrink-0 text-bg-white">
-                    <img src="static/images/daloradius_small.png">
+                    <img src="static/images/samanet-logo.png" alt="Samanet" style="height:28px; width:auto;">
                 </div>
                 <div class="flex-grow-1 ms-3">
 EOF;
@@ -188,8 +191,15 @@ EOF;
         echo $inline_extra_js . "\n";
     }
 
-
+    // Initialize Bootstrap tabs
     echo <<<EOF
+// Initialize Bootstrap tabs
+var tabTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tab"]')),
+    tabList = tabTriggerList.map(function (tabTriggerEl) {
+        return new bootstrap.Tab(tabTriggerEl)
+    });
+
+// Initialize tooltips
 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]')),
     tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl)
@@ -240,6 +250,19 @@ function print_title_and_help($title, $help="") {
 
 EOF;
 
+}
+
+
+// this function prints the page header with title and help, and sets up for footer
+function print_header_and_footer($title, $help="", $logDebugSQL="", $print_header=true) {
+    if ($print_header) {
+        print_title_and_help($title, $help);
+        
+        // Add container div for page content
+        echo '<div class="container-fluid mt-4">' . "\n";
+        echo '<div class="row">' . "\n";
+        echo '<div class="col-12">' . "\n";
+    }
 }
 
 
@@ -412,7 +435,12 @@ EOF;
 function print_additional_controls($descriptors) {
     foreach ($descriptors as $d) {
         $class = (isset($d['class'])) ? $d['class'] : "btn-primary";
-        printf('<button class="btn btn-sm %s ms-1" type="button" onclick="%s">%s</button>', $class, $d['onclick'], $d['label']);
+        if (isset($d['href'])) {
+            $href = htmlspecialchars($d['href'], ENT_QUOTES, 'UTF-8');
+            printf('<a class="btn btn-sm %s ms-1" href="%s">%s</a>', $class, $href, $d['label']);
+        } elseif (isset($d['onclick'])) {
+            printf('<button class="btn btn-sm %s ms-1" type="button" onclick="%s">%s</button>', $class, $d['onclick'], $d['label']);
+        }
     }
 }
 
@@ -1722,14 +1750,12 @@ function print_tab_header($keywords=array(), $active=0) {
                 $button_caption = t('title', $key);
             }
 
-            $onclick = sprintf("openTab(event, '%s')", $tab_id);
             $active_class = ($count == $active) ? ' active' : "";
             $active_elem = ($count == $active) ? ' aria-selected="true"' : "";
 
             echo '<li class="nav-item" role="presentation">';
-            echo '<button type="button" role="tab" data-bs-toggle="tab"';
-            printf(' class="nav-link%s" id="%s" data-bs-target="#%s" aria-controls="%s"%s>%s</button>',
-                   $active_class, $button_id, $tab_id, $tab_id, $active_elem, strip_tags($button_caption));
+            printf('<button type="button" role="tab" class="nav-link%s" id="%s-button" data-bs-toggle="tab" data-bs-target="#%s" aria-controls="%s"%s>%s</button>',
+                   $active_class, $tab_id, $tab_id, $tab_id, $active_elem, strip_tags($button_caption));
             echo '</li>' . "\n";
 
             $count++;
@@ -1766,8 +1792,8 @@ function open_tab($keywords=array(), $index=0, $display=false) {
             $tab_class .= " show active";
         }
 
-        printf('<div id="%s" class="%s" role="tabpanel" aria-labelledby="%s" tabindex="%d">' . "\n",
-              $tab_id, $tab_class, $tab_labelledby, $index);
+        printf('<div id="%s" class="%s" role="tabpanel" aria-labelledby="%s-button" tabindex="%d">' . "\n",
+              $tab_id, $tab_class, $tab_id, $index);
     }
 }
 

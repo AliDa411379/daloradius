@@ -34,6 +34,78 @@
     $logQuery = "performed query on page: ";
     $logDebugSQL = "";
 
+    // Handle bulk delete
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (array_key_exists('csrf_token', $_POST) && isset($_POST['csrf_token']) && dalo_check_csrf_token($_POST['csrf_token'])) {
+            if (array_key_exists('agent_id', $_POST) && is_array($_POST['agent_id']) && count($_POST['agent_id']) > 0) {
+                
+                include('../common/includes/db_open.php');
+                
+                $deleted_count = 0;
+                $deleted_names = array();
+                
+                foreach ($_POST['agent_id'] as $agent_id) {
+                    $agent_id = intval($agent_id);
+                    if ($agent_id > 0) {
+                        // Get agent name and details for logging
+                        $sql = sprintf("SELECT name, company, email FROM %s WHERE id = %d AND is_deleted = 0", 
+                                       $configValues['CONFIG_DB_TBL_DALOAGENTS'], $agent_id);
+                        $res = $dbSocket->query($sql);
+                        $agent_name = "";
+                        $agent_company = "";
+                        $agent_email = "";
+                        if ($res && $row = $res->fetchRow()) {
+                            $agent_name = $row[0];
+                            $agent_company = $row[1];
+                            $agent_email = $row[2];
+                        }
+                        
+                        // Soft delete the agent (mark as deleted)
+                        $sql = sprintf("UPDATE %s SET is_deleted = 1 WHERE id = %d", 
+                                       $configValues['CONFIG_DB_TBL_DALOAGENTS'], $agent_id);
+                        $res = $dbSocket->query($sql);
+                        $logDebugSQL .= "$sql;\n";
+                        
+                        if (!DB::isError($res) && $dbSocket->affectedRows() > 0) {
+                            // Also mark the associated operator as deleted
+                            if (!empty($agent_company) || !empty($agent_email)) {
+                                $sql_op = sprintf("UPDATE %s SET is_deleted = 1 WHERE is_agent = 1 AND (company = '%s' OR email1 = '%s')", 
+                                                  $configValues['CONFIG_DB_TBL_DALOOPERATORS'], 
+                                                  $dbSocket->escapeSimple($agent_company),
+                                                  $dbSocket->escapeSimple($agent_email));
+                                $dbSocket->query($sql_op);
+                                $logDebugSQL .= "$sql_op;\n";
+                            }
+                            
+                            $deleted_count++;
+                            if (!empty($agent_name)) {
+                                $deleted_names[] = $agent_name;
+                            }
+                        }
+                    }
+                }
+                
+                include('../common/includes/db_close.php');
+                
+                if ($deleted_count > 0) {
+                    $successMsg = sprintf("Successfully deleted %d agent(s): %s", 
+                                          $deleted_count, 
+                                          implode(', ', $deleted_names));
+                    $logAction = sprintf("Successfully deleted %d agents on page: ", $deleted_count);
+                } else {
+                    $failureMsg = "No agents were deleted";
+                    $logAction = "Failed deleting agents (no agents deleted) on page: ";
+                }
+            } else {
+                $failureMsg = "No agents selected for deletion";
+                $logAction = "Failed deleting agents (no agents selected) on page: ";
+            }
+        } else {
+            $failureMsg = "CSRF token validation failed";
+            $logAction = "CSRF token validation failed on page: ";
+        }
+    }
+
     // set session's page variable
     $_SESSION['PREV_LIST_PAGE'] = $_SERVER['REQUEST_URI'];
 
@@ -76,7 +148,7 @@
     include('include/management/pages_common.php');
 
     // we use this simplified query just to initialize $numrows
-    $sql = sprintf("SELECT COUNT(id) FROM %s", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
+    $sql = sprintf("SELECT COUNT(id) FROM %s WHERE is_deleted = 0", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
     $res = $dbSocket->query($sql);
     $numrows = $res->fetchrow()[0];
 
@@ -94,7 +166,7 @@
         
         // we execute and log the actual query
         $sql = sprintf("SELECT id, name, company, phone, email, address, city, country, creation_date
-                          FROM %s", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
+                          FROM %s WHERE is_deleted = 0", $configValues['CONFIG_DB_TBL_DALOAGENTS']);
         $sql .= sprintf(" ORDER BY %s %s LIMIT %s, %s", $orderBy, $orderType, $offset, $rowsPerPage);
         $res = $dbSocket->query($sql);
         $logDebugSQL .= "$sql;\n";
@@ -103,7 +175,8 @@
         
         // this can be passed as form attribute and 
         // printTableFormControls function parameter
-        $action = "mng-agents-del.php";
+        // Submit to this page to handle bulk delete in the POST branch above
+        $action = "mng-agents-list.php";
         
         // we prepare the "controls bar" (aka the table prologue bar)
         $params = array(
@@ -114,8 +187,16 @@
                             'order_type' => $orderType,
                         );
         
+        // we prepare the "controls bar" (aka the table prologue bar)
+        $additional_controls = array();
+        $additional_controls[] = array(
+                                'onclick' => "removeCheckbox('listall','mng-agents-list.php')",
+                                'label' => 'Delete',
+                                'class' => 'btn-danger',
+                              );
+        
         $descriptors = array();
-        $descriptors['start'] = array( 'common_controls' => 'agent_id[]', );
+        $descriptors['start'] = array( 'common_controls' => 'agent_id[]', 'additional_controls' => $additional_controls );
         $descriptors['center'] = array( 'draw' => $drawNumberLinks, 'params' => $params );
         print_table_prologue($descriptors);
         
@@ -123,6 +204,9 @@
         
         // print table top
         print_table_top($form_descriptor);
+        
+        // add CSRF token
+        echo '<input name="csrf_token" type="hidden" value="' . dalo_csrf_token() . '" />';
 
         // second line of table header
         printTableHead($cols, $orderBy, $orderType);
@@ -161,7 +245,7 @@
                 $creation_date = date('Y-m-d H:i:s', strtotime($creation_date));
             }
 
-            // build table row
+            // build table row (note: we skip address column in display)
             $table_row = array( $checkbox, $tooltip, $company, $phone, $email, $city, $country, $creation_date );
 
             // print table row
@@ -180,7 +264,7 @@
                                 'multiple_pages' => $drawNumberLinks
                            );
 
-        $descriptor = array( 'table_foot' => $table_foot );
+        $descriptor = array( 'form' => $form_descriptor, 'table_foot' => $table_foot );
         print_table_bottom($descriptor);
 
         // get and print "links"

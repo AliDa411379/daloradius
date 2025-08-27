@@ -1,0 +1,35 @@
+/* Samanet theme tweaks */
+:root {
+  --samanet-purple: #5e1b97; /* approximate from provided image */
+  --samanet-gold: #d4a85d;    /* approximate from provided image */
+}
+
+/* Navbar background and link colors */
+header.border-bottom {
+  background-color: var(--samanet-purple) !important;
+  border-bottom: 0 !important;
+}
+header .nav-link,
+header .dropdown-toggle,
+header .text-dark { color: #fff !important; }
+header .nav-link.link-active { color: var(--samanet-gold) !important; }
+
+/* Search input styling to fit theme */
+header .form-control { border-color: rgba(255,255,255,0.4); }
+header .btn.btn-outline-secondary { color: #fff; border-color: rgba(255,255,255,0.6); }
+header .btn.btn-outline-secondary:hover { background: rgba(255,255,255,0.15); }
+
+/* Sidebar and main background subtle tweak */
+#sidebar.bg-light { background-color: #f8f6fb !important; }
+.col-sm-10.bg-white { background-color: #ffffff !important; }
+
+/* Buttons accent */
+.btn-primary { background-color: var(--samanet-purple); border-color: var(--samanet-purple); }
+.btn-primary:hover { filter: brightness(0.95); }
+.btn-warning { background-color: var(--samanet-gold); border-color: var(--samanet-gold); color: #3b2a12; }
+
+/* Card accents */
+.card .card-header { background-color: #f2e9fb; }
+
+/* Footer strip */
+.p-4.text-center.text-bg-light { background-color: #f2e9fb !important; }

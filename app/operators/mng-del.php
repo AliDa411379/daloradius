@@ -26,6 +26,7 @@
     $operator = $_SESSION['operator_user'];
 
     include implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_LIBRARY'], 'check_operator_perm.php' ]);
+    include_once implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_LIBRARY'], 'agent_functions.php' ]);
  
     // init logging variables
     $log = "visited page: ";
@@ -68,6 +69,28 @@
                     if (!in_array($value, $usernames)) {
                         $usernames[] = $value;
                     }
+                }
+                
+                // Filter usernames based on agent permissions
+                $allowed_usernames = [];
+                $denied_usernames = [];
+                
+                foreach ($usernames as $username) {
+                    if (isUserOwnedByAgent($dbSocket, $username, $operator, $configValues)) {
+                        $allowed_usernames[] = $username;
+                    } else {
+                        $denied_usernames[] = $username;
+                    }
+                }
+                
+                // Update usernames to only include allowed ones
+                $usernames = $allowed_usernames;
+                
+                // Show warning if some users were denied
+                if (count($denied_usernames) > 0) {
+                    $failureMsg = sprintf("Access denied: You can only delete users you created. Denied access to: %s", 
+                                         implode(', ', $denied_usernames));
+                    $logAction = "Failed deleting users (agent access denied) on page: ";
                 }
                 
                 if (count($usernames) > 0) {

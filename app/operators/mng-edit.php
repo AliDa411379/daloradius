@@ -36,6 +36,7 @@
     include("../common/includes/validation.php");
     include("../common/includes/layout.php");
     include_once("include/management/functions.php");
+    include_once("library/agent_functions.php");
 
 
     include('../common/includes/db_open.php');
@@ -99,6 +100,13 @@
     if (!$exists) {
         // we reset the username if it does not exist
         $username = "";
+    } elseif (!empty($username)) {
+        // check if agent has permission to edit this user
+        if (!isUserOwnedByAgent($dbSocket, $username, $operator, $configValues)) {
+            $failureMsg = "Access denied: You can only edit users that you have created.";
+            $logAction = "Failed editing user (agent access denied) on page: ";
+            $username = ""; // Reset username to prevent editing
+        }
     }
 
     $username_enc = (!empty($username)) ? htmlspecialchars($username, ENT_QUOTES, 'UTF-8') : "";
@@ -179,6 +187,10 @@
 
             $planName = (array_key_exists('planName', $_POST) && isset($_POST['planName'])) ? trim($_POST['planName']) : "";
             $oldplanName = (array_key_exists('oldplanName', $_POST) && isset($_POST['oldplanName'])) ? trim($_POST['oldplanName']) : "";
+            
+            // Handle agent assignment
+            $selected_agents = (array_key_exists('selected_agents', $_POST) && is_array($_POST['selected_agents'])) 
+                             ? array_map('intval', $_POST['selected_agents']) : array();
 
             // fix up errors with droping the Plan name
             if (empty($planName)) {
@@ -190,7 +202,7 @@
                 // dealing with attributes
                 include("library/attributes.php");
 
-                $skipList = array( "username", "submit", "groups", "planName", "oldplanName",
+                $skipList = array( "username", "submit", "groups", "planName", "oldplanName", "selected_agents",
                                    "copycontact", "firstname", "lastname", "email", "department", "company", "workphone",
                                    "homephone", "mobilephone", "address", "city", "state", "country", "zip", "notes",
                                    "changeUserInfo", "bi_contactperson", "bi_company", "bi_email", "bi_phone", "bi_address",
@@ -304,6 +316,37 @@
 
                 addPlanProfile($dbSocket, $username, $planName, $oldplanName);
 
+                // Handle agent assignments
+                if (!empty($username)) {
+                    // Get user ID from userinfo table
+                    $sql = sprintf("SELECT id FROM %s WHERE username='%s'", 
+                                   $configValues['CONFIG_DB_TBL_DALOUSERINFO'], 
+                                   $dbSocket->escapeSimple($username));
+                    $res = $dbSocket->query($sql);
+                    $logDebugSQL .= "$sql;\n";
+                    
+                    if ($res && $row = $res->fetchRow()) {
+                        $user_id = $row[0];
+                        
+                        // Delete existing agent assignments
+                        $sql = sprintf("DELETE FROM user_agent WHERE user_id = %d", $user_id);
+                        $dbSocket->query($sql);
+                        $logDebugSQL .= "$sql;\n";
+                        
+                        // Insert new agent assignments
+                        foreach ($selected_agents as $agent_id) {
+                            if ($agent_id > 0) {
+                                $sql = sprintf("INSERT INTO user_agent (user_id, agent_id) VALUES (%d, %d)", 
+                                               $user_id, $agent_id);
+                                $dbSocket->query($sql);
+                                $logDebugSQL .= "$sql;\n";
+                            }
+                        }
+                        
+                        $logAction .= sprintf("Updated agent assignments for user %s. ", $username);
+                    }
+                }
+
                 $successMsg = sprintf("Successfully updated user <strong>%s</strong>", $username_enc);
                 $logAction .= sprintf("Successfully updated user %s on page: ", $username);
 
@@ -398,11 +441,11 @@ function enableUser() {
     $extra_css = array();
 
     $extra_js = array(
-        "static/js/ajax.js",
-        "static/js/ajaxGeneric.js",
-        "static/js/productive_funcs.js",
-        "static/js/pages_common.js",
-        "static/js/dynamic_attributes.js",
+        "../common/static/js/ajax.js",
+        "../common/static/js/ajaxGeneric.js",
+        "../common/static/js/productive_funcs.js",
+        "../common/static/js/pages_common.js",
+        "../common/static/js/dynamic_attributes.js",
     );
 
     $title = t('Intro','mngedit.php');
@@ -678,6 +721,25 @@ EOF;
 
         // open 4-th tab (not shown)
         open_tab($navkeys, 4);
+        
+        // Load current agent assignments for this user
+        $selected_agents = array();
+        if (!empty($username)) {
+            $sql = sprintf("SELECT ua.agent_id FROM user_agent ua 
+                            INNER JOIN %s u ON u.id = ua.user_id 
+                            WHERE u.username = '%s'", 
+                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'], 
+                           $dbSocket->escapeSimple($username));
+            $res = $dbSocket->query($sql);
+            $logDebugSQL .= "$sql;\n";
+            
+            if ($res) {
+                while ($row = $res->fetchRow()) {
+                    $selected_agents[] = intval($row[0]);
+                }
+            }
+        }
+        
         include_once('include/management/userbillinfo.php');
         close_tab($navkeys, 4);
 

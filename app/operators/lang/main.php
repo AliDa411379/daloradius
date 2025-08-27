@@ -89,6 +89,11 @@ function t($a, $b = null, $c = null, $d = null) {
             return $t[$current];
         }
 
+        if (!isset($t[$current])) {
+            // Return the key itself if translation is missing
+            return ucfirst($current);
+        }
+
         $t = $t[$current];
     }
 

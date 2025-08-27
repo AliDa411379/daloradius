@@ -24,13 +24,16 @@
  
     include("library/checklogin.php");
     $operator = $_SESSION['operator_user'];
+    $operator_id = $_SESSION['operator_id'];
 
     include('library/check_operator_perm.php');
     include_once('../common/includes/config_read.php');
+    include_once("library/agent_functions.php");
 
     include_once("lang/main.php");
     include_once("../common/includes/validation.php");
     include("../common/includes/layout.php");
+    include_once("include/management/populate_selectbox.php");
     
     // init logging variables
     $log = "visited page: ";
@@ -53,6 +56,49 @@
     }
 
     
+    // Check if current operator is an agent
+    $current_agent_id = getCurrentOperatorAgentId($dbSocket, $operator_id, $configValues);
+    $is_current_operator_agent = ($current_agent_id !== null);
+    
+    // Auto-assign agent if operator is an agent, otherwise use form selection
+    if ($is_current_operator_agent) {
+        $agent_id = $current_agent_id;
+    } else {
+        $agent_id = (array_key_exists('agent_id', $_REQUEST) && intval(trim($_REQUEST['agent_id'])) > 0)
+                  ? intval(trim($_REQUEST['agent_id'])) : "";
+    }
+
+    // preload agents for selection (only current agent if operator is an agent)
+    $valid_agents = array();
+    if ($is_current_operator_agent) {
+        // Only show current agent
+        $sql = sprintf("SELECT id, name FROM %s WHERE id = %d AND is_deleted = 0", 
+                       $configValues['CONFIG_DB_TBL_DALOAGENTS'], $current_agent_id);
+    } else {
+        // Show all agents for non-agent operators
+        $sql = sprintf("SELECT id, name FROM %s WHERE is_deleted = 0 ORDER BY name ASC", 
+                       $configValues['CONFIG_DB_TBL_DALOAGENTS']);
+    }
+    $res = $dbSocket->query($sql);
+    $logDebugSQL .= "$sql;\n";
+    while ($row = $res->fetchrow()) {
+        list($id, $name) = $row;
+        $valid_agents[intval($id)] = $name;
+    }
+
+    // preload users connected to selected agent (if any)
+    $valid_users = array();
+    if (!empty($agent_id)) {
+        $sql = sprintf("SELECT u.id, u.username FROM %s u INNER JOIN user_agent ua ON ua.user_id=u.id WHERE ua.agent_id=%d ORDER BY u.username ASC",
+                       $configValues['CONFIG_DB_TBL_DALOUSERINFO'], intval($agent_id));
+        $res = $dbSocket->query($sql);
+        $logDebugSQL .= "$sql;\n";
+        while ($row = $res->fetchrow()) {
+            list($id, $username) = $row;
+            $valid_users[intval($id)] = $username;
+        }
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
         if (array_key_exists('csrf_token', $_POST) && isset($_POST['csrf_token']) && dalo_check_csrf_token($_POST['csrf_token'])) {
@@ -62,11 +108,12 @@
             $currBy = $operator;
         
             $required_fields = array();
-        
-            $payment_invoice_id = (array_key_exists('payment_invoice_id', $_POST) && intval(trim($_POST['payment_invoice_id'])) > 0)
-                                ? intval(trim($_POST['payment_invoice_id'])) : "";
-            if (empty($payment_invoice_id)) {
-                $required_fields['payment_invoice_id'] = t('all','PaymentInvoiceID');
+
+            // New flow: select user (connected to an agent), system finds the most recent open/partial invoice
+            $user_id = (array_key_exists('user_id', $_POST) && intval(trim($_POST['user_id'])) > 0)
+                     ? intval(trim($_POST['user_id'])) : "";
+            if (empty($user_id)) {
+                $required_fields['user_id'] = t('all','UserId');
             }
             
             $payment_type_id = (array_key_exists('payment_type_id', $_POST) && !empty(trim($_POST['payment_type_id'])) &&
@@ -97,6 +144,35 @@
                 $failureMsg = sprintf("Empty or invalid required field(s) [%s]", implode(", ", array_values($required_fields)));
                 $logAction .= "$failureMsg on page: ";
             } else {
+                // Determine target invoice for the selected user: prefer most recent OPEN/PARTIAL invoice
+                $status_map = get_invoice_status_id(); // id => name
+                $open_partial_ids = array();
+                foreach ($status_map as $sid => $sname) {
+                    $sname_l = strtolower(trim($sname));
+                    if (in_array($sname_l, array('open', 'partial'))) {
+                        $open_partial_ids[] = intval($sid);
+                    }
+                }
+
+                $where_status = '';
+                if (!empty($open_partial_ids)) {
+                    $where_status = sprintf(" AND status_id IN (%s)", implode(",", $open_partial_ids));
+                }
+
+                $sql = sprintf("SELECT id FROM %s WHERE user_id=%d%s ORDER BY date DESC LIMIT 1",
+                               $configValues['CONFIG_DB_TBL_DALOBILLINGINVOICE'], $user_id, $where_status);
+                $res = $dbSocket->query($sql);
+                $logDebugSQL .= "$sql;\n";
+
+                $payment_invoice_id = "";
+                if ($res && ($row = $res->fetchrow())) {
+                    $payment_invoice_id = intval($row[0]);
+                }
+
+                if (empty($payment_invoice_id)) {
+                    $failureMsg = "No open or partial invoice found for the selected user";
+                    $logAction .= "$failureMsg on page: ";
+                } else {
                 $sql = sprintf("INSERT INTO %s (id, invoice_id, amount, date, type_id, notes,
                                                 creationdate, creationby, updatedate, updateby)
                                         VALUES (0, %d, %s, '%s', %d, '%s', '%s', '%s', NULL, NULL)",
@@ -107,13 +183,14 @@
                 $logDebugSQL .= "$sql;\n";
                 
                 if (!DB::isError($res)) {
-                    $successMsg = sprintf("Inserted new payment for invoice: #<strong>%d</strong><br>", $payment_invoice_id)
+                    $successMsg = sprintf("Inserted new payment for user ID: <strong>%d</strong> (invoice #<strong>%d</strong>)<br>", $user_id, $payment_invoice_id)
                                 . sprintf('<a href="bill-invoice-edit.php?invoice_id=%d" title="Edit">edit invoice #%d</a>',
                                           $payment_invoice_id, $payment_invoice_id);
                     $logAction .= "Successfully inserted new payment for invoice [#$payment_invoice_id] on page: ";
                 } else {
                     $failureMsg = "Failed to insert new payment for invoice: #<strong>$payment_invoice_id</strong>";
                     $logAction .= "Failed to insert new payment for invoice [#$payment_invoice_id] on page: ";
+                }
                 }
             }
 
@@ -123,9 +200,6 @@
             $logAction .= "$failureMsg on page: ";
         }
     } else {
-        $payment_invoice_id = (array_key_exists('payment_invoice_id', $_REQUEST) && intval(trim($_REQUEST['payment_invoice_id'])) > 0)
-                            ? intval(trim($_REQUEST['payment_invoice_id'])) : "";
-        
         $payment_date = (
                             array_key_exists('payment_date', $_REQUEST) &&
                             !empty(trim($_REQUEST['payment_date'])) &&
@@ -156,14 +230,48 @@
         // descriptors 0
         $input_descriptors0 = array();
         
+        // Agent selector (only show for non-agent operators)
+        if (!$is_current_operator_agent) {
+            $agent_options = array( '' => '' );
+            foreach ($valid_agents as $id => $name) { $agent_options[$id] = $name; }
+            $input_descriptors0[] = array(
+                                            "name" => "agent_id",
+                                            "caption" => t('all','Agent'),
+                                            "type" => "select",
+                                            "options" => $agent_options,
+                                            "selected_value" => ((isset($agent_id) && intval($agent_id) > 0) ? $agent_id : ""),
+                                            "tooltipText" => 'Filter users by agent'
+                                         );
+        } else {
+            // For agent operators, show read-only agent info
+            $current_agent_name = isset($valid_agents[$current_agent_id]) ? $valid_agents[$current_agent_id] : 'Unknown Agent';
+            $input_descriptors0[] = array(
+                                            "name" => "agent_display",
+                                            "caption" => t('all','Agent'),
+                                            "type" => "text",
+                                            "value" => $current_agent_name,
+                                            "readonly" => true,
+                                            "tooltipText" => 'Auto-assigned to your agent account'
+                                         );
+            // Hidden field to maintain agent_id for processing
+            $input_descriptors0[] = array(
+                                            "name" => "agent_id",
+                                            "type" => "hidden",
+                                            "value" => $current_agent_id
+                                         );
+        }
+
+        // User selector (users linked to selected agent)
+        $user_options = array( '' => '' );
+        foreach ($valid_users as $id => $uname) { $user_options[$id] = $uname; }
         $input_descriptors0[] = array(
-                                        "name" => "payment_invoice_id",
-                                        "caption" => t('all','PaymentInvoiceID'),
-                                        "type" => "number",
-                                        "value" => ((isset($payment_invoice_id)) ? $payment_invoice_id : ""),
-                                        "min" => 1,
+                                        "name" => "user_id",
+                                        "caption" => t('all','UserId'),
+                                        "type" => "select",
+                                        "options" => $user_options,
+                                        "selected_value" => ((isset($user_id) && intval($user_id) > 0) ? $user_id : ""),
                                         "required" => true,
-                                        "tooltipText" => t('Tooltip','paymentInvoiceTooltip')
+                                        "tooltipText" => 'Select a user assigned to the chosen agent'
                                      );
         
         $input_descriptors0[] = array(
@@ -221,6 +329,55 @@
                                       );
         
         open_form();
+
+        // AJAX reload of user dropdown when agent changes
+        echo '<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var agentSel = document.querySelector("select[name=\\"agent_id\\"]");
+  var userSel = document.querySelector("select[name=\\"user_id\\"]");
+  
+  if (agentSel && userSel) {
+    agentSel.addEventListener("change", function() {
+      var agentId = this.value || "";
+      
+      // Clear user dropdown while loading
+      userSel.innerHTML = "<option value=\\"\\">Loading...</option>";
+      userSel.disabled = true;
+      
+      if (!agentId) {
+        userSel.innerHTML = "<option value=\\"\\">Select an agent first</option>";
+        return;
+      }
+      
+      // Fetch users for selected agent via AJAX
+      console.log("Sending agent ID:", agentId); // Debug log
+      fetch("library/ajax/get_agent_users.php?agent_id=" + encodeURIComponent(agentId))
+        .then(response => response.json())
+        .then(data => {
+          console.log("AJAX response:", data); // Debug log
+          userSel.innerHTML = "<option value=\\"\\">Select User</option>";
+          if (data.success && data.users) {
+            data.users.forEach(function(user) {
+              var option = document.createElement("option");
+              option.value = user.id;
+              option.textContent = user.username;
+              userSel.appendChild(option);
+            });
+          } else {
+            var errorMsg = data.error || "No users found";
+            userSel.innerHTML = "<option value=\\"\\">Error: " + errorMsg + "</option>";
+          }
+          userSel.disabled = false;
+        })
+        .catch(error => {
+          console.error("Error fetching users:", error);
+          userSel.innerHTML = "<option value=\\"\\">Error loading users</option>";
+          userSel.disabled = false;
+        });
+    });
+  }
+});
+</script>';
         
         // fieldset 0
         $fieldset0_descriptor = array(

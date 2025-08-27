@@ -33,7 +33,7 @@ include_once("include/menu/sidebar/mng/default.php");
 
 $descriptors1 = array();
 
-$descriptors1[] = array( 'type' => 'link', 'label' => t('button','NewAgent'), 'href' =>'mng-agents-new.php',
+$descriptors1[] = array( 'type' => 'link', 'label' => t('button','NewAgent'), 'href' =>'mng-agent-new.php',
                          'icon' => 'add', );
 
 if (isset($configValues['CONFIG_IFACE_TABLES_LISTING']) && $configValues['CONFIG_IFACE_TABLES_LISTING'] == "yes") {
