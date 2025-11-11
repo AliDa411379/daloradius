@@ -29,27 +29,29 @@ if (strpos($_SERVER['PHP_SELF'], '/include/menu/sidebar/mng/agents.php') !== fal
 
 $m_active = "Management";
 
-include_once("include/menu/sidebar/mng/default.php");
-
 $descriptors1 = array();
 
 $descriptors1[] = array( 'type' => 'link', 'label' => t('button','NewAgent'), 'href' =>'mng-agent-new.php',
                          'icon' => 'add', );
 
-if (isset($configValues['CONFIG_IFACE_TABLES_LISTING']) && $configValues['CONFIG_IFACE_TABLES_LISTING'] == "yes") {
-    $descriptors1[] = array( 'type' => 'link', 'label' => t('button','ListAgents'), 'href' => 'mng-agents-list.php',
-                             'icon' => 'list', );
-}
+$descriptors1[] = array( 'type' => 'link', 'label' => t('button','ListAgents'), 'href' => 'mng-agents-list.php',
+                         'icon' => 'list', );
 
 $descriptors1[] = array( 'type' => 'text', 'label' => '' );
 
 if (isset($configValues['CONFIG_IFACE_TABLES_LISTING']) && $configValues['CONFIG_IFACE_TABLES_LISTING'] == "yes") {
     $descriptors1[] = array( 'type' => 'form', 'title' => t('button','EditAgent'), 'action' => 'mng-agents-edit.php', 'method' => 'GET',
-                             'inputs' => array( 'agent_id' => array( 'type' => 'text', 'size' => '15' ) ), );
+                             'inputs' => array( 'agent_id' => array( 'type' => 'text', 'size' => '15', 'tooltipText' => 'Enter Agent ID number...' ) ), );
 }
 
 $descriptors1[] = array( 'type' => 'link', 'label' => t('button','RemoveAgent'), 'href' => 'mng-agents-del.php',
                          'icon' => 'delete', );
+
+// Agent-User Mapping section
+$descriptors_mapping = array();
+
+$descriptors_mapping[] = array( 'type' => 'link', 'label' => 'Agent-User Mappings', 'href' => 'mng-agent-usergroup-mapping-list.php',
+                               'icon' => 'list', );
 
 $descriptors2 = array();
 
@@ -58,6 +60,7 @@ $descriptors2[] = array( 'type' => 'link', 'label' => t('button','CSVExport'), '
 
 $sections = array();
 $sections[] = array( 'title' => t('title','AgentManagement'), 'descriptors' => $descriptors1 );
+$sections[] = array( 'title' => 'Agent-User Mappings', 'descriptors' => $descriptors_mapping );
 $sections[] = array( 'title' => t('title','ImportExport'), 'descriptors' => $descriptors2 );
 
 // add sections to menu

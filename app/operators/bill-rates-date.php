@@ -163,7 +163,7 @@
                     $multiplicate = 604800;
                     break;
                 case "month":
-                    $multiplicate = 187488000;        // a month is 31 days
+                    $multiplicate = 2678400;        // a month is 31 days
                     break;
                 default:
                     $multiplicate = 0;

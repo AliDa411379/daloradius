@@ -56,6 +56,7 @@
     $cols = array(
                     'username' => t('all','Username'),
                     'framedipaddress' => t('all','IPAddress'),
+                    'public_ip_framed' => 'Public IP',
                     'acctstarttime' => t('all','StartTime'),
                     'acctstoptime' => t('all','StopTime'),
                     'Time' => t('all','TotalTime'),
@@ -121,7 +122,7 @@
     $_SESSION['reportQuery'] = (count($sql_WHERE) > 0) ? " WHERE " . implode(" AND ", $sql_WHERE) : "";
     $_SESSION['reportType'] = "TopUsers";
 
-    $sql = "SELECT DISTINCT(ra.username) AS username, ra.FramedIPAddress, ra.AcctStartTime, MAX(ra.AcctStopTime),
+    $sql = "SELECT DISTINCT(ra.username) AS username, ra.FramedIPAddress, ra.public_ip_framed, ra.AcctStartTime, MAX(ra.AcctStopTime),
                    SUM(ra.AcctSessionTime) AS Time, SUM(ra.AcctInputOctets) AS Upload,
                    SUM(ra.AcctOutputOctets) AS Download, ra.AcctTerminateCause, ra.NASIPAddress
             FROM " . $configValues['CONFIG_DB_TBL_RADACCT'] . " AS ra";
@@ -201,14 +202,16 @@
             }
 
 
-            list( $username, $framedIPAddress, $acctStartTime, $maxAcctStopTime, $time,
+            list( $username, $framedIPAddress, $public_ip_framed, $acctStartTime, $maxAcctStopTime, $time,
                   $upload, $download, $acctTerminateCause, $nasIPAddress ) = $row;
 
             $time = time2str($time);
             $upload = toxbyte($upload);
             $download = toxbyte($download);
 
-            $table_row = array( $username, $framedIPAddress, $acctStartTime, $maxAcctStopTime, $time,
+            $table_row = array( $username, $framedIPAddress, 
+                                (!empty($public_ip_framed) ? $public_ip_framed : '(n/d)'), 
+                                $acctStartTime, $maxAcctStopTime, $time,
                                 $upload, $download, $acctTerminateCause, $nasIPAddress );
 
             // print table row

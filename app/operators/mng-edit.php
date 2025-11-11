@@ -188,9 +188,16 @@
             $planName = (array_key_exists('planName', $_POST) && isset($_POST['planName'])) ? trim($_POST['planName']) : "";
             $oldplanName = (array_key_exists('oldplanName', $_POST) && isset($_POST['oldplanName'])) ? trim($_POST['oldplanName']) : "";
             
-            // Handle agent assignment
-            $selected_agents = (array_key_exists('selected_agents', $_POST) && is_array($_POST['selected_agents'])) 
-                             ? array_map('intval', $_POST['selected_agents']) : array();
+            // Default to agent id 1, and add current agent if operator is an agent
+            $selected_agents = array(1); // Default to agent id 1
+            $current_agent_id = getCurrentOperatorAgentId($dbSocket, $operator_id, $configValues);
+            if ($current_agent_id && $current_agent_id != 1) {
+                $selected_agents[] = $current_agent_id; // Add agent's own id if different from 1
+            }
+            // Merge with form selections
+            $form_agents = (array_key_exists('selected_agents', $_POST) && is_array($_POST['selected_agents']))
+                          ? array_map('intval', $_POST['selected_agents']) : array();
+            $selected_agents = array_unique(array_merge($selected_agents, $form_agents));
 
             // fix up errors with droping the Plan name
             if (empty($planName)) {
@@ -526,7 +533,7 @@ function enableUser() {
 
         // set navbar stuff
         $navkeys = array(
-                          'AccountInfo', 'RADIUSCheck', 'RADIUSReply', 'UserInfo', 'BillingInfo',
+                          'AccountInfo', 'RADIUSCheck', 'RADIUSReply', 'UserInfo', 'AgentInfo', 'BillingInfo',
                           'Groups', 'Attributes', array( 'OtherInfo', "Other Info" )
                         );
 
@@ -718,47 +725,54 @@ EOF;
         include_once('include/management/userinfo.php');
         close_tab($navkeys, 3);
 
-
-        // open 4-th tab (not shown)
+        // open 4-th tab (AgentInfo)
         open_tab($navkeys, 4);
-        
+
         // Load current agent assignments for this user
         $selected_agents = array();
         if (!empty($username)) {
-            $sql = sprintf("SELECT ua.agent_id FROM user_agent ua 
-                            INNER JOIN %s u ON u.id = ua.user_id 
-                            WHERE u.username = '%s'", 
-                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'], 
+            $sql = sprintf("SELECT ua.agent_id FROM user_agent ua
+                            INNER JOIN %s u ON u.id = ua.user_id
+                            WHERE u.username = '%s'",
+                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
                            $dbSocket->escapeSimple($username));
             $res = $dbSocket->query($sql);
             $logDebugSQL .= "$sql;\n";
-            
+
             if ($res) {
                 while ($row = $res->fetchRow()) {
                     $selected_agents[] = intval($row[0]);
                 }
             }
         }
-        
-        include_once('include/management/userbillinfo.php');
+
+        include('../common/includes/db_open.php');
+        include_once('include/management/agentInfo.php');
+        include('../common/includes/db_close.php');
         close_tab($navkeys, 4);
 
         // open 5-th tab (not shown)
         open_tab($navkeys, 5);
 
+        include_once('include/management/userbillinfo.php');
+        close_tab($navkeys, 5);
+
+        // open 6-th tab (not shown)
+        open_tab($navkeys, 6);
+
         include('../common/includes/db_open.php');
         include_once('include/management/groups.php');
         include('../common/includes/db_close.php');
 
-        close_tab($navkeys, 5);
-
-        open_tab($navkeys, 6);
-
-        include_once('include/management/attributes.php');
-
         close_tab($navkeys, 6);
 
         open_tab($navkeys, 7);
+
+        include_once('include/management/attributes.php');
+
+        close_tab($navkeys, 7);
+
+        open_tab($navkeys, 8);
 
         // accordion
         echo '<div class="accordion m-2" id="accordion-parent">';
@@ -768,7 +782,7 @@ EOF;
         userConnectionStatus($username, 1);                     // userConnectionStatus (same as above)
         echo '</div>';
 
-        close_tab($navkeys, 7);
+        close_tab($navkeys, 8);
 
         // close tab wrapper
         close_tab_wrapper();

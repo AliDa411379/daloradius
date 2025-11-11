@@ -63,7 +63,8 @@ if ($detected_category == "mng") {
         } else {
             $detected_subcategory = "rad-" . $tmp[2];
         }
-            
+    } else if ($tmp[1] == "agent") {
+        $detected_subcategory = "agents";
     } else {
         $detected_subcategory = $tmp[1];
     }

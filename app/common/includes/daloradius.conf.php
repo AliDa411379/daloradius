@@ -30,10 +30,10 @@ if (strpos($_SERVER['PHP_SELF'], '/common/includes/daloradius.conf.php') !== fal
 
 $configValues['FREERADIUS_VERSION'] = '3';
 $configValues['CONFIG_DB_ENGINE'] = 'mysqli';
-$configValues['CONFIG_DB_HOST'] = '127.0.0.1';
+$configValues['CONFIG_DB_HOST'] = '172.30.16.200';
 $configValues['CONFIG_DB_PORT'] = '3306';
-$configValues['CONFIG_DB_USER'] = 'root';
-$configValues['CONFIG_DB_PASS'] = '';
+$configValues['CONFIG_DB_USER'] = 'bassel';
+$configValues['CONFIG_DB_PASS'] = 'bassel_password';
 $configValues['CONFIG_DB_NAME'] = 'radius';
 $configValues['CONFIG_DB_TBL_RADCHECK'] = 'radcheck';
 $configValues['CONFIG_DB_TBL_RADREPLY'] = 'radreply';

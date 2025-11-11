@@ -104,15 +104,15 @@
 
             include('../common/includes/db_open.php');
             
-            // Auto-assign current agent if operator is an agent
-            $selected_agents = array();
+            // Default to agent id 1, and add current agent if operator is an agent
+            $selected_agents = array(1); // Default to agent id 1
             $current_agent_id = getCurrentOperatorAgentId($dbSocket, $operator_id, $configValues);
-            if ($current_agent_id) {
-                $selected_agents = array($current_agent_id);
-            } else {
-                // Fallback to form selection for non-agent operators
-                $selected_agents = (array_key_exists('selected_agents', $_POST) && isset($_POST['selected_agents'])) ? $_POST['selected_agents'] : array();
+            if ($current_agent_id && $current_agent_id != 1) {
+                $selected_agents[] = $current_agent_id; // Add agent's own id if different from 1
             }
+            // Merge with form selections
+            $form_agents = (array_key_exists('selected_agents', $_POST) && isset($_POST['selected_agents'])) ? $_POST['selected_agents'] : array();
+            $selected_agents = array_unique(array_merge($selected_agents, $form_agents));
 
             // we will have a $username_to_check, only
             // if required arguments have been supplied
@@ -426,7 +426,7 @@
                                      );
 
         // set navbar stuff
-        $navkeys = array( 'AccountInfo', 'UserInfo', 'AgentInfo', 'Attributes' );
+        $navkeys = array( 'AccountInfo', 'UserInfo', 'AgentInfo', 'Userbilling info', 'Attributes' );
 
         // print navbar controls
         print_tab_header($navkeys);
@@ -486,19 +486,26 @@
         include_once('include/management/userinfo.php');
         close_tab($navkeys, 1);
 
+        // open 2-nd tab (AgentInfo)
+        open_tab($navkeys, 2);
+        // ensure DB connection exists for the included section
+        include('../common/includes/db_open.php');
+        include_once('include/management/agentInfo.php');
+        include('../common/includes/db_close.php');
+        close_tab($navkeys, 2);
 
-		// open 2-th tab (shown)
-		open_tab($navkeys, 2);
-		// ensure DB connection exists for the included section
-		include('../common/includes/db_open.php');
-		include_once('include/management/userbillinfo.php');
-		include('../common/includes/db_close.php');
-		close_tab($navkeys, 2);
+   // open 3-th tab (shown)
+   open_tab($navkeys, 3);
+   // ensure DB connection exists for the included section
+   include('../common/includes/db_open.php');
+   include_once('include/management/userbillinfo.php');
+   include('../common/includes/db_close.php');
+   close_tab($navkeys, 3);
 
-        // open 3-th tab (shown)
-        open_tab($navkeys, 3);
+        // open 4-th tab (shown)
+        open_tab($navkeys, 4);
         include_once('include/management/attributes.php');
-        close_tab($navkeys, 3);
+        close_tab($navkeys, 4);
 
         // close tab wrapper
         close_tab_wrapper();

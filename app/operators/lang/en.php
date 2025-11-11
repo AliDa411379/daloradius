@@ -585,6 +585,8 @@ $l['Tooltip']['EditProxy'] = "Edit Proxy";
 $l['Tooltip']['EditGroup'] = "Edit Group";
 $l['Tooltip']['EditAgent'] = "Edit Agent";
 $l['Tooltip']['RemoveAgent'] = "Remove Agent";
+$l['Tooltip']['ViewAgentInfo'] = "View Agent Information";
+$l['Tooltip']['EditUser'] = "Edit User";
 
 $l['FormField']['mngradgroupcheck.php']['ToolTip']['Value'] = "If you specify value then only the single record that matches both the groupname and the specific value which you have specified will be removed. If you omit the value then all records for that particular groupname will be removed!";
 
@@ -1201,6 +1203,8 @@ $l['Intro']['mngagentsnew.php'] = "New Agent";
 $l['Intro']['mngagentslist.php'] = "List Agents";
 $l['Intro']['mngagentsedit.php'] = "Edit Agent";
 $l['Intro']['mngagentsdel.php'] = "Remove Agent";
+$l['Intro']['mngagentinfo.php'] = "Agent Information";
+$l['Intro']['mngraduseragentmappinglist'] = "Agent-User Mapping Overview";
 $l['Intro']['configoperatorsnew.php'] = "New Operator";
 $l['Intro']['configoperatorslist.php'] = "Operators Listing";
 
@@ -1219,6 +1223,8 @@ $l['captions']['filldetailsofnewrate'] = "Fill below the details for the new rat
 
 $l['helpPage']['configdashboard'] = "Dashboard Settings";
 
+$l['helpPage']['mngagentinfo'] = "View detailed information about an agent including all assigned users and their details.";
+$l['helpPage']['mngraduseragentmappinglist'] = "Overview of all agents showing how many users are assigned to each agent and their usernames.";
 
 $l['helpPage']['repnewusers'] = "The following table lists new users created each month.";
 

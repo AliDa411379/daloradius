@@ -74,15 +74,15 @@ function print_html_prologue($title, $lang='en', $extra_css=array(), $extra_js=a
 <meta name="copyright" content="Filippo Lauria">
 <meta name="robots" content="noindex">
 
-<link rel="apple-touch-icon" sizes="180x180" href="static/images/favicon/apple-touch-icon.png">
-<link rel="icon" type="image/png" sizes="32x32" href="static/images/favicon/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="static/images/favicon/favicon-16x16.png">
-<link rel="manifest" href="static/images/favicon/site.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="../common/static/images/favicon/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../common/static/images/favicon/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../common/static/images/favicon/favicon-16x16.png">
+<link rel="manifest" href="../common/static/images/favicon/site.webmanifest">
 
 EOF;
 
     // Append custom theme
-    $extra_css[] = "static/css/custom-theme.css";
+    $extra_css[] = "../common/static/css/custom-theme.css";
 
     $css = array_merge($common_css, $extra_css);
     foreach ($css as $href) {
@@ -161,7 +161,7 @@ EOF;
         <div class="p-4 text-center text-bg-light border-top border-bottom">
             <div class="d-flex align-items-center">
                 <div class="flex-shrink-0 text-bg-white">
-                    <img src="static/images/samanet-logo.png" alt="Samanet" style="height:28px; width:auto;">
+                    <img src="../common/static/images/samanet-logo.png" alt="Samanet" style="height:28px; width:auto;">
                 </div>
                 <div class="flex-grow-1 ms-3">
 EOF;

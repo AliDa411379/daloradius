@@ -1,0 +1,832 @@
+<?php
+// Handle AJAX requests for direct user creation with SMS Hisham two
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    // Clean output buffer to prevent any unwanted output
+    if (ob_get_level()) {
+        ob_clean();
+    }
+    header('Content-Type: application/json; charset=utf-8');
+    error_reporting(0);
+    ini_set('display_errors', 0);
+
+    // DB config
+    $db_host = "172.30.16.200";
+    $db_user = "bassel";
+    $db_pass = "bassel_password";
+    $db_name = "radius";
+
+    $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+    if ($conn->connect_error) {
+        die(json_encode(['success' => false, 'message' => 'Database connection failed']));
+    }
+
+    $action = $_POST['action'] ?? '';
+    $mobile = $_POST['mobile'] ?? '';
+
+    // Validate mobile number format
+    if (!preg_match('/^\+963[0-9]{9}$/', $mobile)) {
+        die(json_encode(['success' => false, 'message' => 'Invalid mobile number format']));
+    }
+
+    if ($action === 'create_user') {
+        // Direct user creation with SMS password delivery
+
+        // Username = phone number (without +)
+        $username = str_replace('+', '', $mobile);
+        // Generate random password
+        $password = generateRandomPassword(8);
+
+        error_log("Creating user: $username with password: $password");
+
+        // Check if user already exists
+        $check_sql = "SELECT COUNT(*) AS cnt FROM radcheck WHERE username = ?";
+        $stmt = $conn->prepare($check_sql);
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+
+        if ($row['cnt'] > 0) {
+            die(json_encode([
+                'success' => false,
+                'message' => 'User already exists with this mobile number.'
+            ]));
+        }
+
+        // Create new user account
+        $conn->begin_transaction();
+        try {
+            error_log("Creating user account for: $username (mobile: $mobile)");
+
+            // radcheck - store user credentials
+            $sql1 = "INSERT INTO radcheck (username, attribute, op, value) VALUES (?, 'Cleartext-Password', ':=', ?)";
+            $stmt = $conn->prepare($sql1);
+            $stmt->bind_param("ss", $username, $password);
+            if (!$stmt->execute()) throw new Exception("radcheck insert failed: " . $conn->error);
+            error_log("radcheck entry created for user: $username");
+
+            // userinfo - store user information
+            $sql2 = "INSERT INTO userinfo (username, firstname, lastname, email, department, company, workphone, homephone, mobilephone) 
+                     VALUES (?, 'Guest', 'User', '', 'Samanet ISP', 'Samanet ISP', '', '', ?)";
+            $stmt = $conn->prepare($sql2);
+            $stmt->bind_param("ss", $username, $mobile);
+            if (!$stmt->execute()) throw new Exception("userinfo insert failed: " . $conn->error);
+            error_log("userinfo entry created for user: $username");
+
+            // userbillinfo - billing information
+            $sql3 = "INSERT INTO userbillinfo (username, planName) VALUES (?, 'Free WiFi')";
+            $stmt = $conn->prepare($sql3);
+            $stmt->bind_param("s", $username);
+            if (!$stmt->execute()) throw new Exception("userbillinfo insert failed: " . $conn->error);
+            error_log("userbillinfo entry created for user: $username");
+
+            // radusergroup - assign to hotspot group
+            $sql4 = "INSERT INTO radusergroup (username, groupname, priority) VALUES (?, 'hotspot', 1)";
+            $stmt = $conn->prepare($sql4);
+            $stmt->bind_param("s", $username);
+            if (!$stmt->execute()) throw new Exception("radusergroup insert failed: " . $conn->error);
+            error_log("radusergroup entry created for user: $username");
+
+
+            //radusergroup add row
+
+
+
+
+            // Check if hotspot group exists in radgroupcheck
+            $check_group_sql = "SELECT COUNT(*) as cnt FROM radgroupcheck WHERE groupname = 'hotspot'";
+            $result = $conn->query($check_group_sql);
+            $row = $result->fetch_assoc();
+
+            if ($row['cnt'] == 0) {
+                // Create basic hotspot group configuration if it doesn't exist
+                $group_check_sql = "INSERT INTO radgroupcheck (groupname, attribute, op, value) VALUES 
+                               ('hotspot', 'Auth-Type', ':=', 'Accept')";
+                if (!$conn->query($group_check_sql)) {
+                    error_log("Warning: Could not create radgroupcheck entry for hotspot group: " . $conn->error);
+                } else {
+                    error_log("Created radgroupcheck entry for hotspot group");
+                }
+            }
+
+            $conn->commit();
+            error_log("User account created successfully for: $username");
+
+            // Send username and password via SMS using Samanet API
+            $sms_sent = sendPasswordSMS($mobile, $username, $password);
+
+            echo json_encode([
+                'success' => true,
+                'message' => $sms_sent ? 'Account created successfully! Your credentials have been sent via SMS.' : 'Account created successfully! SMS sending failed, but your account is ready.',
+                'username' => $username,
+                'password' => $password,
+                'sms_sent' => $sms_sent
+            ]);
+            exit;
+        } catch (Exception $e) {
+            $conn->rollback();
+            error_log("Error creating user account for $username: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Error creating account: ' . $e->getMessage()]);
+            exit;
+        }
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid action']);
+        exit;
+    }
+}
+
+function generateRandomPassword($length = 8)
+{
+    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    $password = '';
+    for ($i = 0; $i < $length; $i++) {
+        $password .= $characters[rand(0, strlen($characters) - 1)];
+    }
+    return $password;
+}
+
+function sendPasswordSMS($mobile, $username, $password)
+{
+    // SMS message content
+    $sms_message = "Samanet ISP your password: " . $password;
+
+    // Remove + from mobile number for the API
+    $mobile_number = str_replace('+', '', $mobile);
+
+    // Samanet SMS API endpoint
+    $api_url = "http://mobily.samanet.sy/sendServerSMS.php";
+
+    // Build the URL with parameters
+    $url = $api_url . "?msg=" . urlencode($sms_message) . "&mob=" . urlencode($mobile_number);
+
+    error_log("Sending SMS to $mobile_number: $sms_message");
+    error_log("SMS API URL: $url");
+
+    // Send SMS using cURL
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+
+    $response = curl_exec($ch);
+    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curl_error = curl_error($ch);
+    curl_close($ch);
+
+    if ($curl_error) {
+        error_log("SMS API cURL error: " . $curl_error);
+        return false;
+    }
+
+    if ($http_code !== 200) {
+        error_log("SMS API HTTP error: " . $http_code);
+        return false;
+    }
+
+    error_log("SMS API response: " . $response);
+
+    // Log SMS attempt in database (optional)
+    logSMSAttempt($mobile, $sms_message, $response, $http_code);
+
+    return true;
+}
+
+function logSMSAttempt($mobile, $message, $response, $http_code)
+{
+    global $conn;
+
+    // Create SMS log table if it doesn't exist
+    $create_log_sql = "CREATE TABLE IF NOT EXISTS sms_log (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        mobile VARCHAR(20) NOT NULL,
+        message TEXT NOT NULL,
+        response TEXT,
+        http_code INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )";
+    $conn->query($create_log_sql);
+
+    // Log the SMS attempt
+    $log_sql = "INSERT INTO sms_log (mobile, message, response, http_code) VALUES (?, ?, ?, ?)";
+    $stmt = $conn->prepare($log_sql);
+    $stmt->bind_param("sssi", $mobile, $message, $response, $http_code);
+    $stmt->execute();
+}
+
+?>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samanet ISP - WiFi Registration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Samanen ISP - Professional WiFi Signup Styles */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6d28d9 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+        }
+
+        .signup-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="25" cy="25" r="1" fill="white" opacity="0.1"/><circle cx="75" cy="75" r="1" fill="white" opacity="0.1"/><circle cx="50" cy="10" r="0.5" fill="white" opacity="0.1"/><circle cx="10" cy="60" r="0.5" fill="white" opacity="0.1"/><circle cx="90" cy="40" r="0.5" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+            pointer-events: none;
+        }
+
+        .logo {
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            opacity: 0.9;
+            font-weight: 400;
+            position: relative;
+            z-index: 1;
+        }
+
+        .form-container {
+            padding: 40px 30px;
+        }
+
+        .step h2 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .step-description {
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 32px;
+            font-size: 15px;
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .input-wrapper:focus-within {
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+            background: white;
+        }
+
+        .country-code {
+            background: #e2e8f0;
+            padding: 16px 12px;
+            font-weight: 600;
+            color: #374151;
+            border-right: 2px solid #cbd5e1;
+            font-size: 16px;
+        }
+
+        .mobile-input,
+        .code-input {
+            flex: 1;
+            border: none;
+            padding: 16px;
+            font-size: 16px;
+            background: transparent;
+            outline: none;
+            color: #1f2937;
+            font-weight: 500;
+        }
+
+        .code-input {
+            width: 100%;
+            text-align: center;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: 8px;
+            padding: 20px;
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .code-input:focus {
+            border-color: #8b5cf6;
+            box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+            background: white;
+        }
+
+        .input-help {
+            display: block;
+            margin-top: 8px;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(139, 92, 246, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .resend-section {
+            text-align: center;
+            margin: 24px 0;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .resend-section p {
+            margin: 8px 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .link-btn {
+            background: none;
+            border: none;
+            color: #8b5cf6;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: underline;
+            font-size: 14px;
+            transition: color 0.3s ease;
+        }
+
+        .link-btn:hover {
+            color: #7c3aed;
+        }
+
+        .success-message {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .success-icon {
+            margin-bottom: 24px;
+            animation: bounceIn 0.6s ease-out;
+        }
+
+        @keyframes bounceIn {
+            0% {
+                transform: scale(0.3);
+                opacity: 0;
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            70% {
+                transform: scale(0.9);
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .success-message h2 {
+            color: #10b981;
+            margin-bottom: 16px;
+        }
+
+        .success-message p {
+            color: #6b7280;
+            margin-bottom: 32px;
+            font-size: 15px;
+        }
+
+        .error-message {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 20px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .error-icon {
+            font-size: 20px;
+        }
+
+        .error-message p {
+            color: #dc2626;
+            font-weight: 500;
+            margin: 0;
+        }
+
+        .footer {
+            background: #f8fafc;
+            padding: 24px 30px;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .footer p {
+            margin: 8px 0;
+            font-size: 13px;
+            color: #6b7280;
+        }
+
+        .footer .link {
+            color: #8b5cf6;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer .link:hover {
+            text-decoration: underline;
+        }
+
+        .powered-by {
+            font-weight: 600;
+            color: #374151 !important;
+        }
+
+        .credentials-box {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+
+        .credentials-box h3 {
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-size: 18px;
+            text-align: center;
+        }
+
+        .credential-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .credential-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+
+        .credential-label {
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .credential-value {
+            font-family: 'Courier New', monospace;
+            background: #e2e8f0;
+            padding: 6px 12px;
+            border-radius: 6px;
+            color: #1f2937;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+
+            .signup-card {
+                border-radius: 16px;
+            }
+
+            .header {
+                padding: 30px 20px;
+            }
+
+            .form-container {
+                padding: 30px 20px;
+            }
+
+            .footer {
+                padding: 20px;
+            }
+
+            .header h1 {
+                font-size: 24px;
+            }
+
+            .step h2 {
+                font-size: 20px;
+            }
+        }
+
+        /* Animation for step transitions */
+        .step {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Loading states */
+        .btn-loading {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Input validation styles */
+        .input-wrapper.error {
+            border-color: #dc2626;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+        }
+
+        .input-wrapper.success {
+            border-color: #10b981;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="signup-card">
+            <div class="header">
+                <div class="logo">
+                    <img src="samanet-logo.png" alt="Samanet Logo" width="80" height="80">
+                </div>
+                <h1>Samanet ISP</h1>
+                <p class="subtitle">Free WiFi Registration</p>
+            </div>
+
+            <div class="form-container">
+                <form id="signupForm" action="signup.php" method="POST">
+                    <div class="step" id="step1">
+                        <h2>Enter Your Mobile Number</h2>
+                        <p class="step-description">We'll create your WiFi account and send your password via SMS</p>
+
+                        <div class="input-group">
+                            <div class="input-wrapper">
+                                <span class="country-code">+963</span>
+                                <input type="tel" id="mobile" name="mobile" placeholder="9XX XXX XXX" required
+                                    pattern="[0-9]{9}" maxlength="9" class="mobile-input">
+                            </div>
+                            <small class="input-help">Enter your 9-digit mobile number without the country code</small>
+                        </div>
+
+                        <button type="button" id="sendCodeBtn" class="btn-primary">
+                            <span class="btn-text">Create WiFi Account</span>
+                            <span class="btn-loading" style="display: none;">
+                                <svg class="spinner" width="20" height="20" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25" />
+                                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" opacity="0.75" />
+                                </svg>
+                                Creating Account...
+                            </span>
+                        </button>
+                    </div>
+
+                    <div class="step" id="step2" style="display: none;">
+                        <div class="success-message">
+                            <div class="success-icon">
+                                <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                                    <circle cx="30" cy="30" r="30" fill="#10b981" />
+                                    <path d="M20 30l8 8 12-16" stroke="white" stroke-width="3" fill="none" />
+                                </svg>
+                            </div>
+                            <h2>Account Created Successfully!</h2>
+                            <p>Your WiFi credentials have been generated and sent via SMS.</p>
+
+                     
+
+                            <p><strong>Important:</strong> Save these credentials. You'll need them to connect to WiFi.</p><a href="https://hotspot.samanet.sy/">
+                            <button type="button" onclick="window.close()" class="btn-primary">Start Browsing</button></a>
+                        </div>
+                    </div>
+
+                    <div class="step" id="step3" style="display: none;">
+                        <div class="success-message">
+                            <div class="success-icon">
+                                <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                                    <circle cx="30" cy="30" r="30" fill="#10b981" />
+                                    <path d="M20 30l8 8 12-16" stroke="white" stroke-width="3" fill="none" />
+                                </svg>
+                            </div>
+                            <h2>Registration Successful!</h2>
+                            <p>Your WiFi access has been activated. You can now browse the internet.</p><a href="https://hotspot.samanet.sy/>
+                                <button type="button" onclick="window.close()" class="btn-primary">Login</button></a>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="error-message" id="errorMessage" style="display: none;">
+                    <div class="error-icon">⚠️</div>
+                    <p id="errorText"></p>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>By registering, you agree to our <a href="#" class="link">Terms of Service</a> and <a href="#" class="link">Privacy Policy</a></p>
+                <p class="powered-by">Powered by Samanet ISP • Free WiFi Service</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Signup form JavaScript
+        let currentStep = 1;
+        let mobileNumber = '';
+
+        document.getElementById('sendCodeBtn').addEventListener('click', function() {
+            const mobile = document.getElementById('mobile').value;
+            if (!mobile || mobile.length !== 9) {
+                showError('Please enter a valid 9-digit mobile number');
+                return;
+            }
+
+            mobileNumber = '+963' + mobile;
+
+            // Show loading state
+            this.querySelector('.btn-text').style.display = 'none';
+            this.querySelector('.btn-loading').style.display = 'flex';
+            this.disabled = true;
+
+            // Create user account directly and send password via SMS
+            const formData = new FormData();
+            formData.append('action', 'create_user');
+            formData.append('mobile', mobileNumber);
+
+            fetch('signup.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success message with credentials
+                        showStep(2);
+                        document.getElementById('successUsername').textContent = data.username;
+                        document.getElementById('successPassword').textContent = data.password;
+
+                        if (data.sms_sent) {
+                            showError('Account created! Your password has been sent via SMS to ' + mobileNumber);
+                        } else {
+                            showError('Account created! SMS failed, but here are your credentials: Username: ' + data.username + ', Password: ' + data.password);
+                        }
+                    } else {
+                        showError(data.message || 'Failed to create account. Please try again.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Network error: ' + error.message + '. Please check your connection and try again.');
+                })
+                .finally(() => {
+                    this.querySelector('.btn-text').style.display = 'flex';
+                    this.querySelector('.btn-loading').style.display = 'none';
+                    this.disabled = false;
+                });
+        });
+
+        // No additional event listeners needed for the simplified flow
+
+        function showStep(step) {
+            // Hide all steps
+            document.querySelectorAll('.step').forEach(s => s.style.display = 'none');
+
+            // Show current step
+            document.getElementById('step' + step).style.display = 'block';
+            currentStep = step;
+
+            // Hide error message
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+
+        function showError(message) {
+            document.getElementById('errorText').textContent = message;
+            document.getElementById('errorMessage').style.display = 'flex';
+        }
+    </script>
+</body>
+
+</html>

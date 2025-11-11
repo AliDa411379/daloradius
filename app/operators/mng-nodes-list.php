@@ -17,7 +17,7 @@ $logQuery = "performed query on page: ";
 $logDebugSQL = "";
 $_SESSION['PREV_LIST_PAGE'] = $_SERVER['REQUEST_URI'];
 
-$cols = [ 'mac' => 'MAC', 'name' => 'Name', 'ip' => 'IP', 'latitude' => 'Latitude', 'longitude' => 'Longitude', 'uptime' => 'Uptime', 'users' => 'Users', 'cpu' => 'CPU %', 'time' => 'Last Seen' ];
+$cols = [ 'mac' => 'MAC', 'name' => 'Name', 'type' => 'Type', 'ip' => 'IP', 'latitude' => 'Latitude', 'longitude' => 'Longitude', 'uptime' => 'Uptime', 'users' => 'Users', 'cpu' => 'CPU %', 'time' => 'Last Seen' ];
 $colspan = count($cols);
 
 $param_cols = [];
@@ -39,7 +39,7 @@ if ($numrows > 0) {
     include implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_INCLUDE_MANAGEMENT'], 'pages_numbering.php' ]);
     $drawNumberLinks = strtolower($configValues['CONFIG_IFACE_TABLES_LISTING_NUM']) == "yes" && $maxPage > 1;
 
-    $sql = sprintf("SELECT mac, name, ip, latitude, longitude, uptime, users, cpu, time FROM node ORDER BY %s %s LIMIT %s, %s", $orderBy, $orderType, $offset, $rowsPerPage);
+    $sql = sprintf("SELECT mac, name, type, ip, latitude, longitude, uptime, users, cpu, time FROM node ORDER BY %s %s LIMIT %s, %s", $orderBy, $orderType, $offset, $rowsPerPage);
     $res = $dbSocket->query($sql);
     $logDebugSQL = "$sql;\n";
     $per_page_numrows = $res->numRows();
@@ -64,9 +64,10 @@ if ($numrows > 0) {
     print_table_middle();
 
     while ($row = $res->fetchRow()) {
-        list($mac, $name, $ip, $latitude, $longitude, $uptime, $users, $cpu, $time) = $row;
+        list($mac, $name, $type, $ip, $latitude, $longitude, $uptime, $users, $cpu, $time) = $row;
         $mac   = htmlspecialchars($mac, ENT_QUOTES, 'UTF-8');
         $name  = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+        $type  = htmlspecialchars($type, ENT_QUOTES, 'UTF-8');
         $ip    = htmlspecialchars($ip, ENT_QUOTES, 'UTF-8');
         $latitude = htmlspecialchars($latitude, ENT_QUOTES, 'UTF-8');
         $longitude = htmlspecialchars($longitude, ENT_QUOTES, 'UTF-8');
@@ -75,9 +76,10 @@ if ($numrows > 0) {
         $cpu   = htmlspecialchars($cpu, ENT_QUOTES, 'UTF-8');
         $time  = htmlspecialchars($time, ENT_QUOTES, 'UTF-8');
 
-        $checkbox = get_checkbox_str([ 'name' => 'mac[]', 'value' => $mac, 'label' => '' ]);
+        // show MAC value in the first column so it's visible in the list
+        $checkbox = get_checkbox_str([ 'name' => 'mac[]', 'value' => $mac, 'label' => $mac ]);
         $name_link = sprintf('<a href="%s">%s</a>', 'mng-nodes-edit.php?mac=' . urlencode($mac), $name ?: $mac);
-        print_table_row([ $checkbox, $name_link, $ip, $latitude, $longitude, $uptime, $users, $cpu, $time ]);
+        print_table_row([ $checkbox, $name_link, $type, $ip, $latitude, $longitude, $uptime, $users, $cpu, $time ]);
     }
 
     $table_foot = [ 'num_rows' => $numrows, 'rows_per_page' => $per_page_numrows, 'colspan' => $colspan, 'multiple_pages' => $drawNumberLinks ];

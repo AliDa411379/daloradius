@@ -174,6 +174,7 @@ $l['menu']['Accounting'] = "Учет";
 $l['menu']['Billing'] = "Выставление счетов";
 $l['menu']['Graphs'] = "Графики";
 $l['menu']['Home'] = "Главная";
+$l['menu']['My Agent'] = "Мой Агент";
 $l['menu']['Preferences'] = "Настройки";
 $l['menu']['Help'] = "Help";
 

@@ -17,14 +17,12 @@ $descriptors1[] = array(
     'icon'  => 'add'
 );
 
-if (isset($configValues['CONFIG_IFACE_TABLES_LISTING']) && $configValues['CONFIG_IFACE_TABLES_LISTING'] == 'yes') {
-    $descriptors1[] = array(
-        'type' => 'link',
-        'label' => 'List Nodes',
-        'href'  => 'mng-nodes-list.php',
-        'icon'  => 'list'
-    );
-}
+$descriptors1[] = array(
+    'type' => 'link',
+    'label' => 'List Nodes',
+    'href'  => 'mng-nodes-list.php',
+    'icon'  => 'list'
+);
 
 $descriptors1[] = array(
     'type' => 'form',

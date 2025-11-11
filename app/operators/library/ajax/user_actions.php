@@ -66,9 +66,9 @@ if (array_key_exists('username', $_GET) && isset($_GET['username']) &&
     if (isset($_GET['userDisable'])) {
         $action = 'userDisable';
     } else if (isset($_GET['refillSessionTime'])) {
-        $action = 'refillSessionTime';
+        $action = 'userRefillSessionTime';
     } else if (isset($_GET['refillSessionTraffic'])) {
-        $action = 'refillSessionTraffic';
+        $action = 'userRefillSessionTraffic';
     } else if (isset($_GET['checkDisabled'])) {
         $action = 'checkDisabled';
     } else if (isset($_GET['userMail'])) {    // handle "Send Mail" button action
@@ -228,7 +228,7 @@ if (array_key_exists('username', $_GET) && isset($_GET['username']) &&
             }
             break;
 
-        case 'userRefillSessionTime':
+        case 'RefillSessionTime':
             // we update the sessiontime value to be 0 - this will only work though
             // for accumulative type accounts. For TTF accounts we need to completely
             // delete the record.
@@ -312,7 +312,7 @@ if (array_key_exists('username', $_GET) && isset($_GET['username']) &&
 
             break;
 
-         case 'userRefillSessionTraffic':
+         case 'RefillSessionTraffic':
             $sql = sprintf("UPDATE %s SET AcctInputOctets=0, AcctOutputOctets=0 WHERE Username IN (%s)",
                            $configValues['CONFIG_DB_TBL_RADACCT'], $username_list);
 

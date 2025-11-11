@@ -119,7 +119,19 @@
                 $planCurrency = (array_key_exists('planCurrency', $_POST) && !empty(trim($_POST['planCurrency']))) ? trim($_POST['planCurrency']) : "";
                 $planGroup = (array_key_exists('planGroup', $_POST) && !empty(trim($_POST['planGroup']))) ? trim($_POST['planGroup']) : "";
                 $groups = (array_key_exists('groups', $_POST) && isset($_POST['groups'])) ? $_POST['groups'] : array();
+                $reassign_users = (array_key_exists('reassign_users', $_POST) && $_POST['reassign_users'] == '1') ? true : false;
         
+                // Get old groups before updating if reassign is requested
+                $old_groups = array();
+                if ($reassign_users) {
+                    $sql_old_groups = sprintf("SELECT DISTINCT(profile_name) FROM %s WHERE plan_name='%s'",
+                                            $configValues['CONFIG_DB_TBL_DALOBILLINGPLANSPROFILES'], 
+                                            $dbSocket->escapeSimple($planName));
+                    $res_old_groups = $dbSocket->query($sql_old_groups);
+                    while ($row_old = $res_old_groups->fetchRow()) {
+                        $old_groups[] = $row_old[0];
+                    }
+                }
                 
                 $sql = sprintf("UPDATE %s SET planId='%s', planType='%s', planTimeType='%s', planTimeBank='%s',
                                               planTimeRefillCost='%s', planBandwidthUp='%s', planBandwidthDown='%s',
@@ -150,10 +162,81 @@
                 $logDebugSQL .= "$sql;\n";
                 
                 $groupsCount = insert_multiple_plan_group_mappings($dbSocket, $planName, $groups);
+                
+                // Handle user reassignment if requested
+                $reassigned_users_count = 0;
+                if ($reassign_users && !empty($old_groups) && !empty($groups)) {
+                    // Get all users currently assigned to the old groups AND belonging to this plan
+                    $old_groups_quoted = array_map(function($group) use ($dbSocket) {
+                        return "'" . $dbSocket->escapeSimple($group) . "'";
+                    }, $old_groups);
+                    
+                    $sql_get_users = sprintf(
+                        "SELECT DISTINCT rug.username\n                         FROM %s rug\n                         JOIN %s ubi ON ubi.username = rug.username\n                         WHERE rug.groupname IN (%s) AND ubi.planName = '%s'",
+                        $configValues['CONFIG_DB_TBL_RADUSERGROUP'],
+                        $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'],
+                        implode(',', $old_groups_quoted),
+                        $dbSocket->escapeSimple($planName)
+                    );
+                    $res_users = $dbSocket->query($sql_get_users);
+                    $logDebugSQL .= "$sql_get_users;\n";
+                    
+                    $users_to_reassign = array();
+                    while ($row_user = $res_users->fetchRow()) {
+                        $users_to_reassign[] = $row_user[0];
+                    }
+                    
+                    if (!empty($users_to_reassign)) {
+                        // Remove users from all old groups
+                        foreach ($old_groups as $old_group) {
+                            $users_quoted = array_map(function($user) use ($dbSocket) {
+                                return "'" . $dbSocket->escapeSimple($user) . "'";
+                            }, $users_to_reassign);
+                            
+                            $sql_remove = sprintf("DELETE FROM %s WHERE groupname='%s' AND username IN (%s)",
+                                                $configValues['CONFIG_DB_TBL_RADUSERGROUP'],
+                                                $dbSocket->escapeSimple($old_group),
+                                                implode(',', $users_quoted));
+                            $res_remove = $dbSocket->query($sql_remove);
+                            $logDebugSQL .= "$sql_remove;\n";
+                        }
+                        
+                        // Add users to all new groups
+                        foreach ($groups as $new_group) {
+                            foreach ($users_to_reassign as $username) {
+                                // Check if user is already in this group to avoid duplicates
+                                $sql_check = sprintf("SELECT COUNT(*) FROM %s WHERE username='%s' AND groupname='%s'",
+                                                   $configValues['CONFIG_DB_TBL_RADUSERGROUP'],
+                                                   $dbSocket->escapeSimple($username),
+                                                   $dbSocket->escapeSimple($new_group));
+                                $res_check = $dbSocket->query($sql_check);
+                                $exists = intval($res_check->fetchRow()[0]) > 0;
+                                
+                                if (!$exists) {
+                                    $sql_add = sprintf("INSERT INTO %s (username, groupname, priority) VALUES ('%s', '%s', 1)",
+                                                     $configValues['CONFIG_DB_TBL_RADUSERGROUP'],
+                                                     $dbSocket->escapeSimple($username),
+                                                     $dbSocket->escapeSimple($new_group));
+                                    $res_add = $dbSocket->query($sql_add);
+                                    $logDebugSQL .= "$sql_add;\n";
+                                    if (!PEAR::isError($res_add)) {
+                                        $reassigned_users_count++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                     
                 $format = "The %s named %s has been successfully updated. There are %d %s associated to it";
-                $successMsg = sprintf($format, t('all','PlanName'), $planName_enc, $groupsCount, t('title','Profiles'));
-                $logAction .= sprintf("$format on page: ", t('all','PlanName'), $planName, $groupsCount, t('title','Profiles'));
+                if ($reassigned_users_count > 0) {
+                    $format .= ". %d users have been reassigned to new profiles";
+                    $successMsg = sprintf($format, t('all','PlanName'), $planName_enc, $groupsCount, t('title','Profiles'), $reassigned_users_count);
+                    $logAction .= sprintf("$format on page: ", t('all','PlanName'), $planName, $groupsCount, t('title','Profiles'), $reassigned_users_count);
+                } else {
+                    $successMsg = sprintf($format, t('all','PlanName'), $planName_enc, $groupsCount, t('title','Profiles'));
+                    $logAction .= sprintf("$format on page: ", t('all','PlanName'), $planName, $groupsCount, t('title','Profiles'));
+                }
             }
         
         } else {
@@ -418,6 +501,15 @@
                                         "size" => 5,
                                         "selected_value" => $selected_groups,
                                         "tooltipText" => t('Tooltip','groupTooltip')
+                                     );
+
+        $input_descriptors3[] = array(
+                                        "type" => "checkbox",
+                                        "name" => "reassign_users",
+                                        "id" => "reassign_users",
+                                        "caption" => "Reassign Existing Users",
+                                        "value" => "1",
+                                        "tooltipText" => "Check this to update all existing users from the old profile(s) to the new profile(s)"
                                      );
         
         // set navbar stuff

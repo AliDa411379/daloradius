@@ -167,6 +167,7 @@ $l['menu']['Accounting'] = "Contabilitate";
 $l['menu']['Billing'] = "Facturare";
 $l['menu']['Graphs'] = "Grafice";
 $l['menu']['Home'] = "Acasă";
+$l['menu']['My Agent'] = "Agentul Meu";
 $l['menu']['Preferences'] = "Preferințe";
 $l['menu']['Help'] = "Help";
 

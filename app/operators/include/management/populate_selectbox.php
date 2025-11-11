@@ -442,6 +442,35 @@ function get_online_users() {
 }
 
 
+function get_online_users_with_data() {
+    global $configValues, $dbSocket;
+    
+    $sql = sprintf("SELECT username, framedipaddress, nasipaddress, acctsessionid
+                      FROM %s
+                     WHERE (AcctStopTime IS NULL OR AcctStopTime='0000-00-00 00:00:00')
+                     ORDER BY username ASC", $configValues['CONFIG_DB_TBL_RADACCT']);
+    
+    $res = $dbSocket->query($sql);
+    $users_data = array();
+    
+    while ($row = $res->fetchRow()) {
+        $username = $row[0];
+        $framedip = $row[1];
+        $nasip = $row[2];
+        $sessionid = $row[3];
+        
+        // Store user data for later use
+        $users_data[$username] = array(
+            'framedip' => $framedip,
+            'nasip' => $nasip,
+            'sessionid' => $sessionid
+        );
+    }
+    
+    return $users_data;
+}
+
+
 function get_users($TBL_KEY='CONFIG_DB_TBL_RADCHECK') {
     global $configValues;
     $sql = sprintf("SELECT DISTINCT(username) FROM %s ORDER BY username ASC", $configValues[$TBL_KEY]);

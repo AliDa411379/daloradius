@@ -104,7 +104,7 @@ body {
 <body>
     <main class="form-login w-100 m-auto">
     <form action="dologin.php" method="POST">
-    <img class="mb-4" src="../operators/static/images/samanet-logo.png" alt="Samanet" style="height:48px; width:auto;">
+    <img class="mb-4" src="../common/static/images/samanet-logo.png" alt="Samanet" style="height:48px; width:auto;">
     <h1 class="h3 mb-3 fw-normal"><?= t('text','LoginRequired') ?></h1>
 
     <div class="form-floating">

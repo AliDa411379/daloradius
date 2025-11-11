@@ -1,0 +1,40 @@
+2025-09-14 13:06:25 - === Starting Suspend Process (Non-blocking Parallel CoA) ===
+2025-09-14 13:06:25 - Processing suspend for user: laith
+2025-09-14 13:06:25 - User laith added to block_user
+2025-09-14 13:06:25 - Invoices updated for laith
+2025-09-14 13:06:25 - Billing history recorded for laith
+2025-09-14 13:06:25 - No active sessions found for laith
+2025-09-14 13:06:25 - Processing suspend for user: test12345
+2025-09-14 13:06:25 - User test12345 added to block_user
+2025-09-14 13:06:25 - Invoices updated for test12345
+2025-09-14 13:06:25 - Billing history recorded for test12345
+2025-09-14 13:06:25 - No active sessions found for test12345
+2025-09-14 13:06:25 - Processing suspend for user: basel
+2025-09-14 13:06:25 - User basel added to block_user
+2025-09-14 13:06:25 - Invoices updated for basel
+2025-09-14 13:06:25 - Billing history recorded for basel
+2025-09-14 13:06:25 - No active sessions found for basel
+2025-09-14 13:06:25 - Processing suspend for user: noc
+2025-09-14 13:06:25 - User noc added to block_user
+2025-09-14 13:06:25 - Invoices updated for noc
+2025-09-14 13:06:25 - Billing history recorded for noc
+2025-09-14 13:06:25 - Preparing CoA for user=noc, NAS=10.150.50.2, IP=10.177.15.231, SessionID=8120100b
+2025-09-14 13:06:25 - Processing suspend for user: time
+2025-09-14 13:06:25 - User time added to block_user
+2025-09-14 13:06:25 - Invoices updated for time
+2025-09-14 13:06:25 - Billing history recorded for time
+2025-09-14 13:06:25 - Preparing CoA for user=time, NAS=10.70.71.1, IP=10.177.16.98, SessionID=80800210
+2025-09-14 13:06:25 - Processing suspend for user: traffic
+2025-09-14 13:06:25 - User traffic added to block_user
+2025-09-14 13:06:25 - Invoices updated for traffic
+2025-09-14 13:06:25 - Billing history recorded for traffic
+2025-09-14 13:06:25 - No active sessions found for traffic
+2025-09-14 13:06:25 - CoA stdout for user=time, NAS=10.70.71.1, IP=10.177.16.98: Sent Disconnect-Request Id 5 from 0.0.0.0:36685 to 10.70.71.1:3799 length 26
+	Framed-IP-Address = 10.177.16.98
+Received Disconnect-ACK Id 5 from 10.70.71.1:3799 to 172.30.18.200:36685 length 36
+	NAS-Identifier = "MikroTik"
+	NAS-IP-Address = 10.70.71.1
+2025-09-14 13:06:27 - CoA stdout for user=noc, NAS=10.150.50.2, IP=10.177.15.231: Sent Disconnect-Request Id 44 from 0.0.0.0:38705 to 10.150.50.2:3799 length 26
+	Framed-IP-Address = 10.177.15.231
+(0) No reply from server for ID 44 socket 5
+2025-09-14 13:06:27 - === Suspend Process Completed (Non-blocking Parallel CoA) ===

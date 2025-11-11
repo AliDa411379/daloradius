@@ -44,6 +44,14 @@
                                     "coa" => 'CoA - Change of Authorization'
                               );
 
+    // Handle URL parameters from rep-online.php
+    $username_param = (array_key_exists('username', $_GET) && !empty(trim($_GET['username'])))
+                    ? trim($_GET['username']) : "";
+    $nasaddr_param = (array_key_exists('nasaddr', $_GET) && !empty(trim($_GET['nasaddr'])))
+                   ? trim($_GET['nasaddr']) : "";
+    $customattributes_param = (array_key_exists('customattributes', $_GET) && !empty(trim($_GET['customattributes'])))
+                            ? trim($_GET['customattributes']) : "";
+
     include('../common/includes/db_open.php');
 
     $sql = sprintf("SELECT DISTINCT(nasname), ports, shortname, CONCAT('nas-', id) FROM %s ORDER BY nasname ASC",
@@ -51,10 +59,12 @@
     $res = $dbSocket->query($sql);
 
     $valid_nas_ids = array();
+    $nas_ip_to_id = array(); // Map NAS IP to NAS ID for auto-selection
     while ($row = $res->fetchRow()) {
         $value = $row[3];
         $label = sprintf("%s (%s:%d)", $row[2], $row[0], intval($row[1]));
         $valid_nas_ids[$value] = $label;
+        $nas_ip_to_id[$row[0]] = $value; // Map nasname (IP) to nas-id
     }
 
     include('../common/includes/db_close.php');
@@ -86,7 +96,7 @@
                 } else {
 
                     $packetType = (isset($_POST['packetType']) && in_array(trim($_POST['packetType']), array_keys($valid_packetTypes)))
-                                ? trim($_POST['packetType']) : $valid_packetTypes[0];
+                                ? trim($_POST['packetType']) : "disconnect"; // Default to PoD
                     $customAttributes = (array_key_exists('customAttributes', $_POST) && !empty(trim($_POST['customAttributes'])))
                                       ? trim($_POST['customAttributes']) : "";
 
@@ -165,9 +175,33 @@
     if ($radclient_path !== false) {
 
         include("include/management/populate_selectbox.php");
+        include('../common/includes/db_open.php');
 
-        $options = get_online_users();
+        // Get online users with their data
+        $users_data = get_online_users_with_data();
+        $options = array_keys($users_data);
         array_unshift($options, "");
+
+        // Determine selected username (from URL param or POST)
+        $selected_username = "";
+        if (!empty($username_param)) {
+            $selected_username = $username_param;
+        } elseif (isset($username)) {
+            $selected_username = $username;
+        }
+
+        // Auto-select NAS based on username
+        $selected_nas_id = "";
+        if (!empty($selected_username) && isset($users_data[$selected_username])) {
+            $user_nasip = $users_data[$selected_username]['nasip'];
+            if (isset($nas_ip_to_id[$user_nasip])) {
+                $selected_nas_id = $nas_ip_to_id[$user_nasip];
+            }
+        } elseif (!empty($nasaddr_param) && isset($nas_ip_to_id[$nasaddr_param])) {
+            $selected_nas_id = $nas_ip_to_id[$nasaddr_param];
+        }
+
+        include('../common/includes/db_close.php');
 
         $input_descriptors0 = array();
         $input_descriptors0[] = array(
@@ -175,33 +209,53 @@
                                         "caption" => t('all','Username'),
                                         "type" => "select",
                                         "options" => $options,
-                                        "selected_value" => ((isset($username)) ? $username : ""),
+                                        "selected_value" => $selected_username,
                                      );
 
         $options = $valid_packetTypes;
-        array_unshift($options, "");
+        // Don't add empty option, we want a default selection
 
         $input_descriptors0[] = array(
                                         "name" => "packetType",
                                         "caption" => t('all','PacketType'),
                                         "type" => "select",
                                         "options" => $options,
-                                        "selected_value" => ((isset($packetType)) ? $packetType : ""),
+                                        "selected_value" => ((isset($packetType)) ? $packetType : "disconnect"), // Default to PoD
                                      );
 
         $options = $valid_nas_ids;
         array_unshift($options, "");
+
+        // Determine final NAS selection
+        $final_nas_selection = "";
+        if (isset($nas_id)) {
+            $final_nas_selection = $nas_id;
+        } elseif (!empty($selected_nas_id)) {
+            $final_nas_selection = $selected_nas_id;
+        }
 
         $input_descriptors0[] = array(
                                         "name" => "nas_id",
                                         "caption" => t('all','NasIPHost'),
                                         "type" => "select",
                                         "options" => $options,
-                                        "selected_value" => ((isset($nas_id)) ? $nas_id : ""),
+                                        "selected_value" => $final_nas_selection,
                                      );
 
+        // Determine custom attributes - prioritize URL param, then POST, then auto-generate from user data
+        $custom_attributes_content = "";
+        if (!empty($customattributes_param)) {
+            $custom_attributes_content = $customattributes_param;
+        } elseif (isset($customAttributes)) {
+            $custom_attributes_content = $customAttributes;
+        } elseif (!empty($selected_username) && isset($users_data[$selected_username])) {
+            // Auto-generate custom attributes with private IP only
+            $user_data = $users_data[$selected_username];
+            $custom_attributes_content = sprintf("Framed-IP-Address = %s", $user_data['framedip']);
+        }
+
         $input_descriptors0[] = array( "name" => "customAttributes", "caption" => t('all','customAttributes'),
-                                       "type" => "textarea", "content" => ((isset($customAttributes)) ? $customAttributes : ""),
+                                       "type" => "textarea", "content" => $custom_attributes_content,
                                      );
 
         $input_descriptors0[] = array(
@@ -290,6 +344,80 @@
         }
 
         close_form();
+
+        // Add JavaScript for dynamic functionality
+        echo '<script type="text/javascript">';
+        echo 'var usersData = ' . json_encode($users_data) . ';';
+        echo 'var nasIpToId = ' . json_encode($nas_ip_to_id) . ';';
+        echo '
+        document.addEventListener("DOMContentLoaded", function() {
+            var usernameSelect = document.querySelector("select[name=\'username\']");
+            var nasSelect = document.querySelector("select[name=\'nas_id\']");
+            var customAttributesTextarea = document.querySelector("textarea[name=\'customAttributes\']");
+            
+            // Make username select searchable
+            if (usernameSelect) {
+                // Add search functionality to username select
+                var searchInput = document.createElement("input");
+                searchInput.type = "text";
+                searchInput.placeholder = "Search users...";
+                searchInput.className = "form-control";
+                searchInput.style.marginBottom = "5px";
+                
+                usernameSelect.parentNode.insertBefore(searchInput, usernameSelect);
+                
+                var originalOptions = Array.from(usernameSelect.options);
+                
+                searchInput.addEventListener("input", function() {
+                    var searchTerm = this.value.toLowerCase();
+                    var selectedValue = usernameSelect.value; // Preserve selection
+                    usernameSelect.innerHTML = "";
+                    
+                    originalOptions.forEach(function(option) {
+                        if (option.value === "" || option.text.toLowerCase().includes(searchTerm)) {
+                            var newOption = option.cloneNode(true);
+                            usernameSelect.appendChild(newOption);
+                        }
+                    });
+                    
+                    // Restore selection if it still exists
+                    if (usernameSelect.querySelector("option[value=\'" + selectedValue + "\']")) {
+                        usernameSelect.value = selectedValue;
+                    }
+                });
+                
+                // Handle username selection change
+                usernameSelect.addEventListener("change", function() {
+                    var selectedUsername = this.value;
+                    
+                    if (selectedUsername && usersData[selectedUsername]) {
+                        var userData = usersData[selectedUsername];
+                        
+                        // Auto-select NAS
+                        if (userData.nasip && nasIpToId[userData.nasip] && nasSelect) {
+                            nasSelect.value = nasIpToId[userData.nasip];
+                        }
+                        
+                        // Update custom attributes with private IP only
+                        if (customAttributesTextarea) {
+                            var customAttrs = "Framed-IP-Address = " + userData.framedip;
+                            customAttributesTextarea.value = customAttrs;
+                        }
+                    } else if (!selectedUsername) {
+                        // Clear fields when no user is selected
+                        if (nasSelect) nasSelect.value = "";
+                        if (customAttributesTextarea) customAttributesTextarea.value = "";
+                    }
+                });
+                
+                // Trigger change event if a user is already selected (from URL params)
+                if (usernameSelect.value) {
+                    usernameSelect.dispatchEvent(new Event("change"));
+                }
+            }
+        });
+        ';
+        echo '</script>';
 
     }
 

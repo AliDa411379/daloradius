@@ -1,4 +1,5 @@
 <?php
+
 /*
  *********************************************************************************************************
  * daloRADIUS - RADIUS Web Platform
@@ -31,6 +32,7 @@
     include_once("../common/includes/validation.php");
     include("../common/includes/layout.php");
     include_once("include/management/functions.php");
+    include_once("library/agent_functions.php");
 
     // init logging variables
     $log = "visited page: ";
@@ -63,7 +65,7 @@
 
             // if profiles are associated with this plan, loop through each and add a usergroup entry for each
             foreach($cols as $profile_name) {
-                $sql = sprintf("INSERT INTO %s (username, groupname, priority) VALUES ('%s','%s','0')",
+                $sql = sprintf("INSERT INTO %s (username, groupname, priority) VALUES ('%s','%s','1')",
                                $configValues['CONFIG_DB_TBL_RADUSERGROUP'],
                                $dbSocket->escapeSimple($username),
                                $dbSocket->escapeSimple($profile_name));
@@ -162,6 +164,9 @@
             $oldplanName = (array_key_exists('oldplanName', $_POST) && isset($_POST['oldplanName'])) ? trim($_POST['oldplanName']) : "";
             $profiles = (array_key_exists('profiles', $_POST) && isset($_POST['profiles'])) ? $_POST['profiles'] : array();
             isset($_POST['reassignplanprofiles']) ? $reassignplanprofiles = $_POST['reassignplanprofiles'] : $reassignplanprofiles = "";
+            
+            // Handle agent assignments
+            $selected_agents = (isset($_POST['selected_agents']) && is_array($_POST['selected_agents'])) ? $_POST['selected_agents'] : array();
 
             isset($_POST['password']) ? $password = $_POST['password'] : $password = "";
             isset($_POST['passwordType']) ? $passwordtype = $_POST['passwordType'] : $passwordtype = "";
@@ -343,7 +348,7 @@
                 $res = $dbSocket->query($sql);
                 $logDebugSQL .= "$sql;\n";
 
-                if ($reassignplanprofiles == 1) {
+                if ($reassignplanprofiles == "1") {
                     // if the user chose to re-assign profiles from the change of plan then we proceed with removing
                     // all profiles associated with the user and re-assigning them based on the plan's profiles associations
                     addPlanProfile($dbSocket, $username, $planName, $oldplanName);
@@ -354,6 +359,37 @@
                             foreach ($groups as $group) {
                                 list($groupname, $priority) = $group;
                                 insert_single_user_group_mapping($dbSocket, $username, $groupname, $priority);
+                            }
+                        }
+                    }
+                }
+
+                // Handle agent assignments
+                // Get user ID for the user being edited
+                $sql = sprintf("SELECT id FROM %s WHERE username = '%s'",
+                              $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+                              $dbSocket->escapeSimple($username));
+                $res = $dbSocket->query($sql);
+                if ($res && ($row = $res->fetchRow(2))) { // DB_FETCHMODE_ASSOC
+                    $user_id = intval($row['id']);
+
+                    // Remove existing agent assignments
+                    $sql = sprintf("DELETE FROM user_agent WHERE user_id = %d", $user_id);
+                    $dbSocket->query($sql);
+
+                    // Always assign default agent ID 1
+                    $sql = sprintf("INSERT INTO user_agent (user_id, agent_id) VALUES (%d, %d)",
+                                  $user_id, 1);
+                    $dbSocket->query($sql);
+
+                    // Also handle any additional selected agents
+                    if (!empty($selected_agents)) {
+                        foreach ($selected_agents as $agent_id) {
+                            if (!empty($agent_id) && is_numeric($agent_id) && intval($agent_id) != 1) {
+                                // Skip agent ID 1 since it's already assigned above
+                                $sql = sprintf("INSERT INTO user_agent (user_id, agent_id) VALUES (%d, %d)",
+                                              $user_id, intval($agent_id));
+                                $dbSocket->query($sql);
                             }
                         }
                     }
@@ -418,6 +454,17 @@
                 $bi_updatedate, $bi_updateby
             ) = $res->fetchRow();
 
+        // Load current agent assignments for this user
+        $selected_agents = array();
+        if ($user_id) {
+            $sql = sprintf("SELECT agent_id FROM user_agent WHERE user_id = %d", intval($user_id));
+            $res = $dbSocket->query($sql);
+            $logDebugSQL .= "$sql;\n";
+            
+            while ($row = $res->fetchRow()) {
+                $selected_agents[] = $row[0];
+            }
+        }
 
         // inline extra javascript
         $inline_extra_js = sprintf("var strUsername = 'username=%s';\n", $username_enc);
@@ -493,7 +540,7 @@ function refillSessionTraffic() {
         include_once('include/management/populate_selectbox.php');
 
         // set navbar stuff
-        $navkeys = array( 'AccountInfo', 'UserInfo', 'BillingInfo', 'Profiles', 'Invoices', array( 'OtherInfo', "Other Info" ) );
+        $navkeys = array( 'AccountInfo', 'UserInfo', 'BillingInfo', 'Profiles', 'AgentInfo', 'Invoices', array( 'OtherInfo', "Other Info" ) );
 
         // print navbar controls
         print_tab_header($navkeys);
@@ -559,7 +606,8 @@ function refillSessionTraffic() {
                                         'type' => 'checkbox',
                                         'name' => 'reassignplanprofiles',
                                         'caption' => t('button','ReAssignPlanProfiles'),
-                                        'value' => ((isset($reassignplanprofiles)) ? $reassignplanprofiles : ""),
+                                        'value' => '1',
+                                        'checked' => ((isset($reassignplanprofiles) && $reassignplanprofiles == '1') ? true : (!isset($reassignplanprofiles) ? true : false)),
                                         'tooltipText' => t('Tooltip','reassignplanprofiles')
                                      );
 
@@ -648,18 +696,28 @@ EOF;
 
         close_tab($navkeys, 3);
 
-        // open 4-th tab
+        // open 4-th tab (AgentInfo)
         open_tab($navkeys, 4);
+
+        // Agent Info selection UI (DB is used to list agents)
+        include('../common/includes/db_open.php');
+        include_once('include/management/agentInfo.php');
+        include('../common/includes/db_close.php');
+
+        close_tab($navkeys, 4);
+
+        // open 5-th tab (Invoices)
+        open_tab($navkeys, 5);
 
         if ($user_id) {
             include_once('include/management/userBilling.php');
             userInvoicesStatus($user_id, 1);
         }
 
-        close_tab($navkeys, 4);
+        close_tab($navkeys, 5);
 
-        // open 5-th tab
-        open_tab($navkeys, 5);
+        // open 6-th tab (Other Info)
+        open_tab($navkeys, 6);
 
         echo '<div class="accordion m-2" id="accordion-parent">';
         include_once('include/management/userReports.php');
@@ -668,7 +726,7 @@ EOF;
         userConnectionStatus($username, 1);                     // userConnectionStatus (same as above)
         echo '</div>';
 
-        close_tab($navkeys, 5);
+        close_tab($navkeys, 6);
 
         // close tab wrapper
         close_tab_wrapper();

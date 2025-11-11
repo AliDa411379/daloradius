@@ -171,6 +171,7 @@ $l['menu']['Accounting'] = "Accounting";
 $l['menu']['Billing'] = "Billing";
 $l['menu']['Graphs'] = "Graphs";
 $l['menu']['Home'] = "Home";
+$l['menu']['My Agent'] = "My Agent";
 $l['menu']['Preferences'] = "Preferences";
 $l['menu']['Help'] = "Help";
 

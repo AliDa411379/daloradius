@@ -202,7 +202,7 @@
             $sql = "SELECT * FROM ".$configValues['CONFIG_DB_TBL_DALOBILLINGPLANS'].
                             " WHERE planName='".$dbSocket->escapeSimple($planName)."' LIMIT 1";
             $res = $dbSocket->query($sql);
-            $row = $res->fetchRow(DB_FETCHMODE_ASSOC);
+            $row = $res->fetchRow(2); // DB_FETCHMODE_ASSOC
             $logDebugSQL .= $sql . "\n";
 
             $planRecurring = $row['planRecurring'];
@@ -215,7 +215,7 @@
 
             // get next billing date
             if ($planRecurring == "Yes") {
-                $nextBillDate = getNextBillingDate($planRecurringBillingSchedule, $planRecurringPeriod);
+                $nextBillDate = getNextBillingDate($planRecurringPeriod, $planRecurringBillingSchedule);
             }
 
 
@@ -256,6 +256,36 @@
             $logDebugSQL .= $sql . "\n";
 
             $user_id = $dbSocket->getOne( "SELECT LAST_INSERT_ID() FROM `".$configValues['CONFIG_DB_TBL_DALOUSERBILLINFO']."`" );
+
+            // Initialize balances based on selected plan
+            if (!empty($user_id)) {
+                // Initialize traffic balance if plan has Plan Traffic Total
+                if (isset($row['planTrafficTotal']) && is_numeric($row['planTrafficTotal'])) {
+                    $initialTraffic = (float)$row['planTrafficTotal'];
+                    // Ensure column exists before updating
+                    $sql_check = "SHOW COLUMNS FROM `".$configValues['CONFIG_DB_TBL_DALOUSERBILLINFO']."` LIKE 'traffic_balance'";
+                    $res_check = $dbSocket->query($sql_check);
+                    if ($res_check && method_exists($res_check, 'numRows') && $res_check->numRows() > 0) {
+                        $sql = "UPDATE `".$configValues['CONFIG_DB_TBL_DALOUSERBILLINFO']."` SET traffic_balance='".$dbSocket->escapeSimple($initialTraffic)."' WHERE id=".(int)$user_id;
+                        $dbSocket->query($sql);
+                        $logDebugSQL .= $sql . "\n";
+                    }
+                }
+
+                // Initialize time bank balance if plan has Plan Time Bank
+                if (isset($row['planTimeBank']) && is_numeric($row['planTimeBank'])) {
+                    $initialTime = (float)$row['planTimeBank'];
+                    // Ensure column exists before updating
+                    $sql_check = "SHOW COLUMNS FROM `".$configValues['CONFIG_DB_TBL_DALOUSERBILLINFO']."` LIKE 'timebank_balance'";
+                    $res_check = $dbSocket->query($sql_check);
+                    if ($res_check && method_exists($res_check, 'numRows') && $res_check->numRows() > 0) {
+                        $sql = "UPDATE `".$configValues['CONFIG_DB_TBL_DALOUSERBILLINFO']."` SET timebank_balance='".$dbSocket->escapeSimple($initialTime)."' WHERE id=".(int)$user_id;
+                        $dbSocket->query($sql);
+                        $logDebugSQL .= $sql . "\n";
+                    }
+                }
+            }
+
             return $user_id;
 
         } //FIXME:
@@ -304,7 +334,7 @@
                                         "bi_creditcardexp", "bi_notes", "bi_lead", "bi_coupon", "bi_ordertaker", "bi_billstatus",
                                         "bi_lastbill", "bi_nextbill", "bi_nextinvoicedue", "bi_billdue", "bi_postalinvoice", "bi_faxinvoice",
                                         "bi_emailinvoice", "bi_changeuserbillinfo", "changeUserInfo", "copycontact", "portalLoginPassword",
-                                        "enableUserPortalLogin", "csrf_token", "submit"
+                                        "enableUserPortalLogin", "csrf_token", "submit", "selected_agents"
                                      );
 
                     $attributesCount = handleAttributes($dbSocket, $username, $skipList);
@@ -339,6 +369,35 @@
                     addPlanProfile($dbSocket, $username, $planName);
                     $userbillinfo_id = addUserBillInfo($dbSocket, $username);
 
+                    // Handle agent assignments
+                    // Get user ID for the newly created user
+                    $sql = sprintf("SELECT id FROM %s WHERE username = '%s'",
+                                  $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+                                  $dbSocket->escapeSimple($username));
+                    $res = $dbSocket->query($sql);
+                    if ($res && ($row = $res->fetchRow(2))) { // DB_FETCHMODE_ASSOC
+                        $user_id = intval($row['id']);
+
+                        // Always assign default agent ID 1
+                        $sql = sprintf("INSERT INTO user_agent (user_id, agent_id) VALUES (%d, %d)",
+                                      $user_id, 1);
+                        $dbSocket->query($sql);
+
+                        // Also handle any additional selected agents
+                        if (isset($_POST['selected_agents']) && is_array($_POST['selected_agents'])) {
+                            $selected_agents = $_POST['selected_agents'];
+                            
+                            foreach ($selected_agents as $agent_id) {
+                                if (!empty($agent_id) && is_numeric($agent_id) && intval($agent_id) != 1) {
+                                    // Skip agent ID 1 since it's already assigned above
+                                    $sql = sprintf("INSERT INTO user_agent (user_id, agent_id) VALUES (%d, %d)",
+                                                  $user_id, intval($agent_id));
+                                    $dbSocket->query($sql);
+                                }
+                            }
+                        }
+                    }
+
                     // create any invoices if required (meaning, if a plan was chosen)
                     if ($planName) {
                         include_once("include/management/userBilling.php");
@@ -347,19 +406,24 @@
                         $sql = "SELECT id, planCost, planSetupCost, planTax FROM ".$configValues['CONFIG_DB_TBL_DALOBILLINGPLANS'].
                             " WHERE planName='".$dbSocket->escapeSimple($planName)."' LIMIT 1";
                         $res = $dbSocket->query($sql);
-                        $row = $res->fetchRow(DB_FETCHMODE_ASSOC);
+                        $row = $res->fetchRow(2); // DB_FETCHMODE_ASSOC
+
+                        // Ensure numeric values with defaults
+                        $planCost = is_numeric($row['planCost']) ? (float)$row['planCost'] : 0.0;
+                        $planTax = is_numeric($row['planTax']) ? (float)$row['planTax'] : 0.0;
+                        $planSetupCost = isset($row['planSetupCost']) && is_numeric($row['planSetupCost']) ? (float)$row['planSetupCost'] : 0.0;
 
                         // calculate tax (planTax is the numerical percentage amount)
-                        $calcTax = (float) ($row['planCost'] * (float)($row['planTax'] / 100) );
+                        $calcTax = $planCost * ($planTax / 100);
                         $invoiceItems[0]['plan_id'] = $row['id'];
-                        $invoiceItems[0]['amount'] = $row['planCost'];
+                        $invoiceItems[0]['amount'] = $planCost;
                         $invoiceItems[0]['tax'] = $calcTax;
                         $invoiceItems[0]['notes'] = 'charge for plan service';
 
-                        if (isset($row['planSetupCost']) && ($row['planSetupCost'] != '') ) {
-                            $calcTax = (float) ($row['planSetupCost'] * (float)($row['planTax'] / 100) );
+                        if ($planSetupCost > 0) {
+                            $calcTax = $planSetupCost * ($planTax / 100);
                             $invoiceItems[1]['plan_id'] = $row['id'];
-                            $invoiceItems[1]['amount'] = $row['planSetupCost'];
+                            $invoiceItems[1]['amount'] = $planSetupCost;
                             $invoiceItems[1]['tax'] = $calcTax;
                             $invoiceItems[1]['notes'] = 'charge for plan setup fee (one time)';
                         }
@@ -417,7 +481,6 @@
         "../common/static/js/ajaxGeneric.js",
         "../common/static/js/productive_funcs.js",
         "../common/static/js/dynamic_attributes.js",
-        "../common/static/js/bootstrap.bundle.min.js",
     );
 
     $title = t('Intro','billposnew.php');
@@ -434,7 +497,7 @@
         include_once('include/management/populate_selectbox.php');
 
         // set navbar stuff
-        $navkeys = array( 'AccountInfo', 'UserInfo', 'BillingInfo' );
+        $navkeys = array( 'AccountInfo', 'UserInfo', 'AgentInfo', 'BillingInfo' );
 
         // print navbar controls
         print_tab_header($navkeys);
@@ -503,7 +566,7 @@
                                         "options" => $options,
                                         "multiple" => true,
                                         "size" => 5,
-                                        "selected_value" => ((isset($failureMsg)) ? $groups : ""),
+                                        "selected_value" => ((isset($failureMsg)) ? $profiles : ""),
                                         "tooltipText" => t('Tooltip','groupTooltip')
                                      );
 
@@ -523,13 +586,26 @@
 
         close_tab($navkeys, 1);
 
-        // open 2-nd tab
+        // open 2-nd tab (Agent Info)
         open_tab($navkeys, 2);
 
-        //~ $customApplyButton = sprintf('<input type="submit" name="submit" value="%s" class="button">', t('buttons','apply'));
-        include_once('include/management/userbillinfo.php');
+        // Agent Info selection UI (DB is used to list agents)
+        include('../common/includes/db_open.php');
+        include_once('include/management/agentInfo.php');
+        include('../common/includes/db_close.php');
 
         close_tab($navkeys, 2);
+
+        // open 3-rd tab (Billing Info)
+        open_tab($navkeys, 3);
+
+        //~ $customApplyButton = sprintf('<input type="submit" name="submit" value="%s" class="button">', t('buttons','apply'));
+        // Ensure DB connection is open for userbillinfo include (it queries DB)
+        include('../common/includes/db_open.php');
+        include_once('include/management/userbillinfo.php');
+        include('../common/includes/db_close.php');
+
+        close_tab($navkeys, 3);
 
         // close tab wrapper
         close_tab_wrapper();

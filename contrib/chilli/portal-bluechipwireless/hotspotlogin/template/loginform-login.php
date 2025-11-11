@@ -25,85 +25,53 @@
  *********************************************************************************************************
  */
 
-/*
+
 echo "
-	<form name='form1' method='post' action='$loginpath'>
+	<form name='form1' method='post' action='$loginpath' class='samanet-login-form'>
 		<input type='hidden' name='challenge' value='$challenge'>
 		<input type='hidden' name='uamip' value='$uamip'>
 		<input type='hidden' name='uamport' value='$uamport'>
 		<input type='hidden' name='userurl' value='$userurl'>
 
-		<center>
-		<table border='0' cellpadding='5' cellspacing='0' style='width: 217px;'>
-		<tbody>
-		<tr>
-			<td align='right'>$centerUsername:</td>
-        		<td><input style='font-family: Arial' type='text' name='UserName' size='20' maxlength='128'></td>
-		</tr>
+		<div class='form-group'>
+			<label for='UserName'>$centerUsername</label>
+			<input type='text' id='UserName' name='UserName' placeholder='Enter username' class='samanet-input' required>
+		</div>
 
-		<tr>
-		        <td align='right'>$centerPassword:</td>
-		        <td><input style='font-family: Arial' type='password' name='Password' size='20' maxlength='128'></td>
-      		</tr>
+		<div class='form-group'>
+			<label for='Password'>$centerPassword</label>
+			<input type='password' id='Password' name='Password' placeholder='Enter password' class='samanet-input' required>
+		</div>
 
-		<tr>
-		        <td align='center' colspan='2' height='23'><input type='submit' name='button' value='Login' 
-				onClick=\"javascript:popUp('$loginpath?res=popup1&uamip=$uamip&uamport=$uamport')\"></td> 
-      		</tr>
+		<button type='submit' name='button' value='Login' class='samanet-btn samanet-btn-primary' 
+			onClick=\"javascript:popUp('$loginpath?res=popup1&uamip=$uamip&uamport=$uamport')\">
+			🌐 تسجيل الدخول | Login
+		</button>
 
-		</tbody>
-		</table>
-		</center>
+		<div class='samanet-divider'>
+			<span>أو | OR</span>
+		</div>
+
+		<div class='samanet-signup-section'>
+			<p>ليس لديك حساب؟ | Don't have an account?</p>
+			<a href='/app/users/signup.php?uamip=$uamip&uamport=$uamport' class='samanet-btn samanet-btn-secondary'>
+				📱 تسجيل جديد | Sign Up
+			</a>
+		</div>
 	</form>
+
+        </div>
+        
+        <div class='samanet-footer'>
+            <p>Powered by <strong>Samanet ISP</strong></p>
+            <p class='footer-small'>مزود خدمة الإنترنت | Internet Service Provider</p>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
 ";
-*/
+
 
 ?>
-
-
-<?php
-	echo "
-	<form name='form1' method='post' action='$loginpath'>
-		<input type='hidden' name='challenge' value='$challenge'>
-		<input type='hidden' name='uamip' value='$uamip'>
-		<input type='hidden' name='uamport' value='$uamport'>
-		<input type='hidden' name='userurl' value='$userurl'>
-	";
-?>
-
-<table class="login_form">
-  <tr>
-    <td align="right">Username:</td>
-
-    <td>
-<input class="login_username" type="text" name="UserName"
-               value="" size="16" />
-    </td>
-  </tr>
-  <tr>
-    <td align="right">Password:</td>
-    <td>
-      <input class="login_password" type="password" name="Password" size="16" />
-    </td>
-
-  </tr>
-  <tr>
-    <td colspan="2" align="right">
-	<input type='hidden' name='button' value='Login'>
-      <input class="login_submit" type="button" name="button" value="Login" 
-	  	<?php echo "onClick=\"javascript:popUp('$loginpath?res=popup1&uamip=$uamip&uamport=$uamport')\"" ?> />
-	
-		<input type="checkbox" name="tos" id="toscheckbox"> 
-			<font size='1'>I agree to the <a href="http://www.bluechipwireless.com/samui_internet_service_terms.html">Terms & Conditions </a> </font>
-    </td>
-  </tr>
-</table>
-</form></div>
-<!--sputnik form ends above-->
-
-
-
-
-

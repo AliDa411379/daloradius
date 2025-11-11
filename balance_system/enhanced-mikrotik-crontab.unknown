@@ -1,0 +1,119 @@
+# Enhanced Mikrotik System Cron Jobs for daloRADIUS
+# 
+# This file contains cron job configurations for the enhanced Mikrotik integration system
+# with billing table optimization and improved performance.
+#
+# INSTALLATION METHODS:
+# Method 1: Add to user crontab
+#   crontab -e
+#   Then copy the job lines below (without the # comments)
+#
+# Method 2: System-wide cron (as root)
+#   sudo cp enhanced-mikrotik-crontab /etc/cron.d/daloradius-enhanced-mikrotik
+#   sudo chmod 644 /etc/cron.d/daloradius-enhanced-mikrotik
+#
+# IMPORTANT: Adjust paths according to your installation
+# Current paths assume daloRADIUS is installed in /home/vboxuser/daloradius
+
+# ============================================================================
+# CORE OPERATIONS - These are the essential jobs for daily operations
+# ============================================================================
+
+# Update user balances from actual usage every 4 hours
+# This reads from radacct and updates userbillinfo balances
+0 */4 * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/update_balances_from_usage_v2.php >> /var/www/daloradius/var/logs/balance_update_v2.log 2>&1
+
+# Sync all user attributes to Mikrotik every 2 hours
+# This converts billing data to RADIUS attributes for Mikrotik NAS
+0 */2 * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/mikrotik_attributes_sync_v2.php --all >> /var/www/daloradius/var/logs/mikrotik_sync_v2.log 2>&1
+
+# Maintain billing table daily at 2 AM
+# This syncs missing data from radacct to the optimized billing table
+0 2 * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/manage_billing_table.php sync >> /var/www/daloradius/var/logs/billing_table_mgmt.log 2>&1
+
+# ============================================================================
+# MAINTENANCE OPERATIONS - These keep the system clean and optimized
+# ============================================================================
+
+# Clean up old processed sessions weekly (Sundays at 3 AM)
+# Removes billing table entries older than 30 days that have been processed
+0 3 * * 0 /usr/bin/php /home/vboxuser/daloradius/var/scripts/manage_billing_table.php cleanup >> /var/www/daloradius/var/logs/billing_table_mgmt.log 2>&1
+
+# Generate weekly usage reports (Mondays at 6 AM)
+# Creates usage statistics and reports for monitoring
+0 6 * * 1 /usr/bin/php /home/vboxuser/daloradius/var/scripts/manage_billing_table.php report >> /var/www/daloradius/var/logs/usage_reports.log 2>&1
+
+# ============================================================================
+# LOG MANAGEMENT - Prevents log files from growing too large
+# ============================================================================
+
+# Rotate log files daily at 4 AM
+# Moves large log files (>10MB) to .old and creates new ones
+0 4 * * * /usr/bin/find /var/www/daloradius/var/logs/ -name "*_v2.log" -size +10M -exec mv {} {}.old \; -exec touch {} \; 2>/dev/null
+0 4 * * * /usr/bin/find /var/www/daloradius/var/logs/ -name "billing_table_mgmt.log" -size +10M -exec mv {} {}.old \; -exec touch {} \; 2>/dev/null
+0 4 * * * /usr/bin/find /var/www/daloradius/var/logs/ -name "usage_reports.log" -size +10M -exec mv {} {}.old \; -exec touch {} \; 2>/dev/null
+
+# Clean up old log files monthly (1st day at 5 AM)
+# Removes .old log files older than 30 days
+0 5 1 * * /usr/bin/find /var/www/daloradius/var/logs/ -name "*.log.old" -mtime +30 -delete 2>/dev/null
+
+# ============================================================================
+# OPTIONAL HIGH-FREQUENCY OPERATIONS
+# Uncomment these if you need more frequent updates (high-traffic environments)
+# ============================================================================
+
+# More frequent balance updates (every hour) - for high-traffic environments
+# */60 * * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/update_balances_from_usage_v2.php >> /var/www/daloradius/var/logs/balance_update_v2.log 2>&1
+
+# More frequent attribute sync (every 30 minutes) - for real-time requirements
+# */30 * * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/mikrotik_attributes_sync_v2.php --all --active-only >> /var/www/daloradius/var/logs/mikrotik_sync_v2.log 2>&1
+
+# Quick billing table sync every 6 hours - for busy systems
+# 0 */6 * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/manage_billing_table.php sync >> /var/www/daloradius/var/logs/billing_table_mgmt.log 2>&1
+
+# ============================================================================
+# MONITORING AND HEALTH CHECKS
+# ============================================================================
+
+# Daily system health check at 7 AM
+# Generates statistics and checks for any issues
+0 7 * * * /usr/bin/php /home/vboxuser/daloradius/var/scripts/manage_billing_table.php stats >> /var/www/daloradius/var/logs/system_health.log 2>&1
+
+# Weekly lock file cleanup (Sundays at 4 AM)
+# Removes any stale lock files that might prevent scripts from running
+0 4 * * 0 /usr/bin/find /var/www/daloradius/var/scripts/ -name "*.lock" -mtime +1 -delete 2>/dev/null
+
+# ============================================================================
+# LEGACY COMPATIBILITY NOTICE
+# ============================================================================
+# 
+# The following legacy scripts are NO LONGER USED in the enhanced system:
+# - mikrotik_attributes_sync.php (replaced by mikrotik_attributes_sync_v2.php)
+# - update_balances_from_usage.php (replaced by update_balances_from_usage_v2.php)
+# - billing_with_mikrotik.php (functionality integrated into enhanced scripts)
+# 
+# If you have existing cron jobs using these scripts, please update them
+# to use the enhanced versions above.
+#
+# ============================================================================
+
+# ============================================================================
+# INSTALLATION VERIFICATION
+# ============================================================================
+#
+# After installing these cron jobs, verify they work by running:
+#
+# 1. Check cron jobs are installed:
+#    crontab -l | grep mikrotik
+#
+# 2. Test the scripts manually:
+#    php /home/vboxuser/daloradius/var/scripts/update_balances_from_usage_v2.php
+#    php /home/vboxuser/daloradius/var/scripts/mikrotik_attributes_sync_v2.php --all --dry-run
+#    php /home/vboxuser/daloradius/var/scripts/manage_billing_table.php stats
+#
+# 3. Monitor log files:
+#    tail -f /var/www/daloradius/var/logs/balance_update_v2.log
+#    tail -f /var/www/daloradius/var/logs/mikrotik_sync_v2.log
+#    tail -f /var/www/daloradius/var/logs/billing_table_mgmt.log
+#
+# ============================================================================

@@ -231,6 +231,7 @@
                                 'subject' => $name,
                                 'actions' => array(),
                             );
+            $tooltip['actions'][] = array( 'href' => sprintf('mng-agent-info.php?agent_id=%s', urlencode($id), ), 'label' => 'View Agent Info', );
             $tooltip['actions'][] = array( 'href' => sprintf('mng-agents-edit.php?agent_id=%s', urlencode($id), ), 'label' => t('Tooltip','EditAgent'), );
 
             // create tooltip

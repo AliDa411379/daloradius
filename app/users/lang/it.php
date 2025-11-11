@@ -172,6 +172,7 @@ $l['menu']['Accounting'] = "Accounting";
 $l['menu']['Billing'] = "Fatturazione";
 $l['menu']['Graphs'] = "Grafici";
 $l['menu']['Home'] = "Home";
+$l['menu']['My Agent'] = "Il Mio Agente";
 $l['menu']['Preferences'] = "Preferenze";
 $l['menu']['Help'] = "Aiuto";
 

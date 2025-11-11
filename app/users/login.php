@@ -146,7 +146,7 @@ EOF;
     </button>
 
     <div class="d-flex justify-content-center align-items-center user-select-none">
-        <img src="../operators/static/images/samanet-logo.png" alt="Samanet Logo" style="height:48px; width:auto;">
+        <img src="../common/static/images/samanet-logo.png" alt="Samanet Logo" style="height:48px; width:auto;">
     </div>
 
     <input name="csrf_token" type="hidden" value="<?= dalo_csrf_token() ?>">

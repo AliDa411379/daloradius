@@ -171,20 +171,52 @@ function user_disconnect($params) {
     $positional_args = sprintf("%s %s %s", escapeshellarg($server_port), escapeshellarg($command), escapeshellarg($secret));
 
     // Include custom attributes in the query
-    $query = sprintf("User-Name=%s", escapeshellarg($params['username']));
+    $query_parts = array();
+    
+    // If custom attributes are provided, use only those
     if (isset($params['customAttributes']) && !empty($params['customAttributes'])) {
         $attr_values = explode(",", $params['customAttributes']);
         foreach ($attr_values as $attr_value) {
-            list($attr, $value) = explode("=", $attr_value);
-            $attr = trim($attr);
-            $value = trim($value);
+            if (strpos($attr_value, '=') !== false) {
+                list($attr, $value) = explode("=", $attr_value, 2);
+                $attr = trim($attr);
+                $value = trim($value);
 
-            include_once implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'validation.php' ]);
-            if (!empty($attr) && !empty($value) && $attr !== 'User-Name' && preg_match(ALLOWED_ATTRIBUTE_CHARS_REGEX, $attr) === 1) {
-                $query .= sprintf(", %s=%s", $attr, escapeshellarg($value));
+                include_once implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'validation.php' ]);
+                if (!empty($attr) && !empty($value) && preg_match(ALLOWED_ATTRIBUTE_CHARS_REGEX, $attr) === 1) {
+                    $query_parts[] = sprintf("%s=%s", $attr, escapeshellarg($value));
+                }
             }
         }
     }
+    
+    // If no custom attributes or no valid attributes found, get Framed-IP-Address from user data
+    if (empty($query_parts)) {
+        // Get the user's Framed-IP-Address from the database
+        include implode(DIRECTORY_SEPARATOR, [$configValues['COMMON_INCLUDES'], 'db_open.php']);
+        
+        $sql = sprintf("SELECT framedipaddress FROM %s WHERE username=? AND (AcctStopTime IS NULL OR AcctStopTime='0000-00-00 00:00:00') ORDER BY acctstarttime DESC LIMIT 1", 
+                      $configValues['CONFIG_DB_TBL_RADACCT']);
+        $prepared = $dbSocket->prepare($sql);
+        $res = $dbSocket->execute($prepared, $params['username']);
+        
+        if ($row = $res->fetchrow()) {
+            $framedip = $row[0];
+            if (!empty($framedip)) {
+                $query_parts[] = sprintf("Framed-IP-Address=%s", escapeshellarg($framedip));
+            } else {
+                // Fallback to User-Name if no Framed-IP-Address found
+                $query_parts[] = sprintf("User-Name=%s", escapeshellarg($params['username']));
+            }
+        } else {
+            // Fallback to User-Name if user not found in accounting table
+            $query_parts[] = sprintf("User-Name=%s", escapeshellarg($params['username']));
+        }
+        
+        include implode(DIRECTORY_SEPARATOR, [$configValues['COMMON_INCLUDES'], 'db_close.php']);
+    }
+    
+    $query = implode(", ", $query_parts);
 
     // Set radclient options
     $radclient_options = sprintf(" -c %s -n %s -r %s -t %s -x", escapeshellarg($count), escapeshellarg($requests),

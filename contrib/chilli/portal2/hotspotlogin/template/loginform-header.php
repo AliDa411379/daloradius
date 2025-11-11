@@ -25,26 +25,20 @@
  *********************************************************************************************************
  */
 
+$signup_url = "/app/users/signup.php";
+
 echo <<<END
 
-<div id="wrap">
-
-		<div class="header"><p>Hotspot<span>Login</span><sup>
-			By <a href="http://templatefusion.org">TemplateFusion.org</a></sup></p>
-		</div>
+<div id="samanet-container">
+    <div class="samanet-card">
+        <div class="samanet-header">
+            <img src="template/images/samanet-logo.png" alt="Samanet ISP" class="samanet-logo">
+            <h1>مرحباً بك في شبكة سمانت</h1>
+            <p class="subtitle">Welcome to Samanet WiFi Network</p>
+        </div>
 		
-	<div id="navigation">
-		<ul class="glossymenu">
-			<li><a href="#" class="current"><b>Home</b></a></li>
-			<li><a href="#"><b>Services</b></a></li>	
-			<li><a href="#"><b>About Us</b></a></li>	
-			<li><a href="#"><b>Contact</b></a></li>	
-		</ul>
-	</div>
-		
-	<div id="body">
-		<h1>Hotspot Login</h1>         
-		<p>		
+        <div class="samanet-body">
+            <h2>تسجيل الدخول | Login</h2>
 
 END;
 

@@ -46,6 +46,7 @@
                    'username' => t('all','Username'),
                    t('all','Name'),
                    'framedipaddress' => t('all','Framed IP Address',),
+                   'public_ip_framed' => 'Public IP',
                    'calledstationid' => t('all','Calling Station ID',),
                    'acctstarttime' => t('all','StartTime'),
                    'acctsessiontime' => t('all','TotalTime'),
@@ -114,6 +115,16 @@
 
     include('../common/includes/db_open.php');
     include('include/management/pages_common.php');
+    
+    // Update radacct records that don't have public_ip_framed set
+    $update_sql = "UPDATE " . $configValues['CONFIG_DB_TBL_RADACCT'] . " ra
+                   INNER JOIN nat ON nat.`Private IP` = ra.framedipaddress
+                   SET ra.public_ip_framed = nat.`Public IP`
+                   WHERE (ra.public_ip_framed IS NULL OR ra.public_ip_framed = '')
+                   AND ra.framedipaddress IS NOT NULL 
+                   AND ra.framedipaddress != ''
+                   AND (ra.AcctStopTime IS NULL OR ra.AcctStopTime='0000-00-00 00:00:00')";
+    $dbSocket->query($update_sql);
 
     // ra is a placeholder in the SQL statements below
     // except for $usernameLastConnect, which has been only partially escaped,
@@ -131,6 +142,7 @@
     //orig: used as maethod to get total rows - this is required for the pages_numbering.php page
     $sql = "SELECT ra.username AS username,
                    ra.framedipaddress AS framedipaddress,
+                   ra.public_ip_framed AS public_ip_framed,
                    ra.callingstationid AS callingstationid,
                    ra.acctstarttime AS starttime,
                    ra.acctsessiontime AS sessiontime,
@@ -143,7 +155,7 @@
                    rn.shortname AS nasshortname,
                    ui.firstname AS firstname,
                    ui.lastname AS lastname
-              FROM %s AS ra LEFT JOIN %s AS hs ON hs.mac=ra.calledstationid
+              FROM %s AS ra LEFT JOIN %s AS hs ON hs.name=ra.calledstationid
                             LEFT JOIN %s AS rn ON rn.nasname=ra.nasipaddress
                             LEFT JOIN %s AS ui ON ra.username=ui.username";
 
@@ -225,11 +237,11 @@
                 $row[$i] = htmlspecialchars($row[$i], ENT_QUOTES, 'UTF-8');
             }
 
-            //~ username, framedipaddress, callingstationid, starttime, sessiontime, nasipaddress,
+            //~ username, framedipaddress, public_ip_framed, callingstationid, starttime, sessiontime, nasipaddress,
             //~ calledstationid, sessionid, upload, download, hotspot, nasshortname, firstname, lastname
 
             list(
-                    $this_username, $this_framedipaddress, $this_callingstationid, $this_starttime, $this_sessiontime,
+                    $this_username, $this_framedipaddress, $this_public_ip_framed, $this_callingstationid, $this_starttime, $this_sessiontime,
                     $this_nasipaddress, $this_calledstationid, $this_sessionid, $this_upload, $this_download,
                     $this_hotspot, $this_nasshortname, $this_firstname, $this_lastname
                 ) = $row;
@@ -286,8 +298,9 @@
 
             // define table row
             $table_row = array(
-                                $checkbox, $tooltip2, $this_name, $this_framedipaddress, $this_callingstationid,
-                                $this_starttime, $this_sessiontime, $this_hotspot, $this_nasshortname, $tooltip1
+                                $checkbox, $tooltip2, $this_name, $this_framedipaddress, 
+                                (!empty($this_public_ip_framed) ? $this_public_ip_framed : '(n/d)'), 
+                                $this_callingstationid, $this_starttime, $this_sessiontime, $this_hotspot, $this_nasshortname, $tooltip1
                               );
 
             // print table row

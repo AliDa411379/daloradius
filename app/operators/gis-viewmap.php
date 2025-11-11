@@ -73,9 +73,9 @@
 	    var map = L.map('map').setView([33.5138, 36.2765], 13); // إحداثيات دمشق
 	    var group = L.featureGroup().addTo(map);
 
-	    L.tileLayer('https://172.30.64.7:3001/TilesServer/tiles/{z}/{x}/{y}.png', {
+	    L.tileLayer('http://172.30.18.100:3001/TilesServer/tiles/{z}/{x}/{y}.png', {
 	        attribution: '&copy; Local Tiles Server',
-	        maxZoom: 10
+	        maxZoom: 18
 	    }).addTo(map);
     
 EOF;

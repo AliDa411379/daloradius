@@ -12,11 +12,18 @@ include implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'layout
 include implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'db_open.php' ]);
 include_once implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'validation.php' ]);
 
+// init logging variables
+$log = "visited page: ";
+$logAction = "";
+$logDebugSQL = "";
+
 $title = 'New Node';
 print_html_prologue($title, $langCode);
 print_title_and_help($title, 'Create a new node.');
 
 $errors = [];
+$successMsg = '';
+$failureMsg = '';
 $mac = trim($_POST['mac'] ?? '');
 $name = trim($_POST['name'] ?? '');
 $ip = trim($_POST['ip'] ?? '');
@@ -25,6 +32,7 @@ $longitude = trim($_POST['longitude'] ?? '');
 
 // Basic info
 $description = trim($_POST['description'] ?? '');
+$type = trim($_POST['type'] ?? '');
 $netid = trim($_POST['netid'] ?? '');
 
 // Owner info
@@ -67,75 +75,121 @@ $firmware = trim($_POST['firmware'] ?? '');
 $firmware_revision = trim($_POST['firmware_revision'] ?? '');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (empty($mac) || !preg_match('/^[0-9A-Fa-f:.-]{12,20}$/', $mac)) {
-        $errors[] = 'Valid MAC is required';
-    }
-    if (empty($ip) || !filter_var($ip, FILTER_VALIDATE_IP)) {
-        $errors[] = 'Valid IP is required';
-    }
-    
-    // Validate latitude and longitude if provided
-    if (!empty($latitude) && (!is_numeric($latitude) || $latitude < -90 || $latitude > 90)) {
-        $errors[] = 'Latitude must be a number between -90 and 90';
-    }
-    if (!empty($longitude) && (!is_numeric($longitude) || $longitude < -180 || $longitude > 180)) {
-        $errors[] = 'Longitude must be a number between -180 and 180';
-    }
-    
-    // Validate email if provided
-    if (!empty($owner_email) && !filter_var($owner_email, FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Valid email address is required';
-    }
-    
-    // Validate approval status
-    if (!in_array($approval_status, ['A', 'R', 'P'])) {
-        $approval_status = 'P';
-    }
-    
-    // Validate numeric fields
-    if (!empty($netid) && !is_numeric($netid)) {
-        $errors[] = 'Network ID must be numeric';
-    }
-    if (!empty($hops) && !is_numeric($hops)) {
-        $errors[] = 'Hops must be numeric';
-    }
-    if (!empty($wifi_channel) && !is_numeric($wifi_channel)) {
-        $errors[] = 'WiFi channel must be numeric';
-    }
-
-    if (!$errors) {
-        $sql = "INSERT INTO node (mac, name, ip, latitude, longitude, description, netid, owner_name, owner_email, 
-                owner_phone, owner_address, approval_status, gateway, gateway_bit, hops, wan_iface, wan_ip, wan_mac, 
-                wan_gateway, wan_bup, wan_bdown, wifi_iface, wifi_ip, wifi_mac, wifi_ssid, wifi_key, wifi_channel, 
-                lan_iface, lan_mac, lan_ip, firmware, firmware_revision, uptime, users, cpu, time) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, NOW())";
+    // CSRF validation
+    if (!dalo_check_csrf_token($_POST['csrf_token'] ?? '')) {
+        $failureMsg = 'CSRF token error';
+        $logAction .= "$failureMsg on page: ";
+    } else {
+        if (empty($mac) || !preg_match('/^[0-9A-Fa-f:.-]{12,20}$/', $mac)) {
+            $errors[] = 'Valid MAC is required';
+        }
         
-        $stmt = $dbSocket->prepare($sql);
-        if (PEAR::isError($stmt)) {
-            $errors[] = $stmt->getMessage();
-        } else {
-            $res = $stmt->execute([
-                $mac, $name, $ip, $latitude, $longitude, $description, $netid, $owner_name, $owner_email,
-                $owner_phone, $owner_address, $approval_status, $gateway, $gateway_bit, $hops, $wan_iface, 
-                $wan_ip, $wan_mac, $wan_gateway, $wan_bup, $wan_bdown, $wifi_iface, $wifi_ip, $wifi_mac, 
-                $wifi_ssid, $wifi_key, $wifi_channel, $lan_iface, $lan_mac, $lan_ip, $firmware, $firmware_revision
-            ]);
+        // allow IP or CIDR
+        $validate_ip_or_cidr = function($value) {
+            $value = trim($value);
+            if ($value === '') return false;
+            if (strpos($value, '/') !== false) {
+                list($base, $prefix) = explode('/', $value, 2);
+                if (!filter_var($base, FILTER_VALIDATE_IP)) return false;
+                if ($prefix === '' || preg_match('/^\d+$/', $prefix) !== 1) return false;
+                $prefix = (int)$prefix;
+                if (filter_var($base, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) return $prefix >= 0 && $prefix <= 32;
+                if (filter_var($base, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) return $prefix >= 0 && $prefix <= 128;
+                return false;
+            }
+            return filter_var($value, FILTER_VALIDATE_IP) !== false;
+        };
+
+        if (empty($ip) || !$validate_ip_or_cidr($ip)) {
+            $errors[] = 'Valid IP is required';
+        }
+        
+        // Validate latitude and longitude if provided
+        if (!empty($latitude) && (!is_numeric($latitude) || $latitude < -90 || $latitude > 90)) {
+            $errors[] = 'Latitude must be a number between -90 and 90';
+        }
+        if (!empty($longitude) && (!is_numeric($longitude) || $longitude < -180 || $longitude > 180)) {
+            $errors[] = 'Longitude must be a number between -180 and 180';
+        }
+        
+        // Validate email if provided
+        if (!empty($owner_email) && !filter_var($owner_email, FILTER_VALIDATE_EMAIL)) {
+            $errors[] = 'Valid email address is required';
+        }
+        
+        // Validate approval status
+        if (!in_array($approval_status, ['A', 'R', 'P'])) {
+            $approval_status = 'P';
+        }
+        
+        // Validate numeric fields
+        if (!empty($netid) && !is_numeric($netid)) {
+            $errors[] = 'Network ID must be numeric';
+        }
+        if (!empty($hops) && !is_numeric($hops)) {
+            $errors[] = 'Hops must be numeric';
+        }
+        if (!empty($wifi_channel) && !is_numeric($wifi_channel)) {
+            $errors[] = 'WiFi channel must be numeric';
+        }
+
+        if ($errors) {
+            $failureMsg = 'Please correct the following errors: ' . implode(', ', $errors);
+            $logAction .= "Failed creating new node due to validation errors on page: ";
+        }
+        
+        if (!$errors) {
+            // Use direct SQL approach like other mng edit files to avoid prepared statement issues
+            $sql = sprintf("INSERT INTO node (mac, name, ip, latitude, longitude, description, type, netid, owner_name, owner_email, 
+                    owner_phone, owner_address, approval_status, gateway, gateway_bit, hops, wan_iface, wan_ip, wan_mac, 
+                    wan_gateway, wan_bup, wan_bdown, wifi_iface, wifi_ip, wifi_mac, wifi_ssid, wifi_key, wifi_channel, 
+                    lan_iface, lan_mac, lan_ip, firmware, firmware_revision, uptime, users, cpu, time) 
+                    VALUES ('%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, '%s', '%s', '%s', '%s', 
+                    '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', 0, 0, 0, NOW())",
+                    $dbSocket->escapeSimple($mac), $dbSocket->escapeSimple($name), $dbSocket->escapeSimple($ip), 
+                    $dbSocket->escapeSimple($latitude), $dbSocket->escapeSimple($longitude), $dbSocket->escapeSimple($description), 
+                    $dbSocket->escapeSimple($type), $dbSocket->escapeSimple($netid), $dbSocket->escapeSimple($owner_name), 
+                    $dbSocket->escapeSimple($owner_email), $dbSocket->escapeSimple($owner_phone), $dbSocket->escapeSimple($owner_address), 
+                    $dbSocket->escapeSimple($approval_status), $dbSocket->escapeSimple($gateway), $gateway_bit, 
+                    $dbSocket->escapeSimple($hops), $dbSocket->escapeSimple($wan_iface), $dbSocket->escapeSimple($wan_ip), 
+                    $dbSocket->escapeSimple($wan_mac), $dbSocket->escapeSimple($wan_gateway), $dbSocket->escapeSimple($wan_bup), 
+                    $dbSocket->escapeSimple($wan_bdown), $dbSocket->escapeSimple($wifi_iface), $dbSocket->escapeSimple($wifi_ip), 
+                    $dbSocket->escapeSimple($wifi_mac), $dbSocket->escapeSimple($wifi_ssid), $dbSocket->escapeSimple($wifi_key), 
+                    $dbSocket->escapeSimple($wifi_channel), $dbSocket->escapeSimple($lan_iface), $dbSocket->escapeSimple($lan_mac), 
+                    $dbSocket->escapeSimple($lan_ip), $dbSocket->escapeSimple($firmware), $dbSocket->escapeSimple($firmware_revision));
+            
+            $res = $dbSocket->query($sql);
+            $logDebugSQL .= "$sql;\n";
+            
             if (PEAR::isError($res)) {
-                $errors[] = $res->getMessage();
+                $failureMsg = sprintf("Failed to create node [%s]: %s", htmlspecialchars($mac, ENT_QUOTES, 'UTF-8'), $res->getMessage());
+                $logAction .= "Failed creating new node [$mac] on page: ";
             } else {
-                header('Location: mng-nodes.php');
-                exit;
+                $successMsg = sprintf("Successfully created node: <strong>%s</strong>", htmlspecialchars($mac, ENT_QUOTES, 'UTF-8'));
+                $logAction .= "Successfully created new node [$mac] on page: ";
+                // Clear form data after successful creation
+                $mac = $name = $ip = $latitude = $longitude = $description = $type = $netid = '';
+                $owner_name = $owner_email = $owner_phone = $owner_address = '';
+                $approval_status = 'P';
+                $gateway = $hops = $wan_iface = $wan_ip = $wan_mac = $wan_gateway = $wan_bup = $wan_bdown = '';
+                $wifi_iface = $wifi_ip = $wifi_mac = $wifi_ssid = $wifi_key = $wifi_channel = '';
+                $lan_iface = $lan_mac = $lan_ip = $firmware = $firmware_revision = '';
             }
         }
-    }
+    } // end CSRF validation else
 }
 
-if ($errors) {
-    echo '<div class="alert alert-danger"><ul class="mb-0">';
-    foreach ($errors as $e) echo '<li>' . htmlspecialchars($e, ENT_QUOTES, 'UTF-8') . '</li>';
-    echo '</ul></div>';
-}
+include_once('include/management/actionMessages.php');
 
+if (!empty($successMsg)) {
+    echo '<script>
+        setTimeout(function() {
+            if (confirm("Node created successfully! Click OK to go to the nodes list, or Cancel to create another node.")) {
+                window.location.href = "mng-nodes-list.php";
+            }
+        }, 2000);
+    </script>';
+}
 ?>
 
 <!-- Nav tabs -->
@@ -195,6 +249,15 @@ if ($errors) {
             <div class="mb-3">
                 <label class="form-label">Description</label>
                 <textarea name="description" class="form-control" rows="3"><?= htmlspecialchars($description, ENT_QUOTES, 'UTF-8') ?></textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Type</label>
+                <select name="type" class="form-select">
+                    <option value="">Select Type</option>
+                    <option value="point to point" <?= $type === 'point to point' ? 'selected' : '' ?>>Point to Point</option>
+                    <option value="sector" <?= $type === 'sector' ? 'selected' : '' ?>>Sector</option>
+                    <option value="nas" <?= $type === 'nas' ? 'selected' : '' ?>>NAS</option>
+                </select>
             </div>
             <div class="row">
                 <div class="col-md-6">
@@ -409,4 +472,5 @@ if ($errors) {
 </form>
 <?php
 include implode(DIRECTORY_SEPARATOR, [ $configValues['COMMON_INCLUDES'], 'db_close.php' ]);
+include implode(DIRECTORY_SEPARATOR, [ $configValues['OPERATORS_LIBRARY'], 'logging.php' ]);
 print_footer_and_html_epilogue();

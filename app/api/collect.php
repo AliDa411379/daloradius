@@ -20,6 +20,12 @@ $users   = isset($_GET['users']) ? intval($_GET['users']) : 0;
 $cpu     = isset($_GET['cpu']) ? floatval($_GET['cpu']) : 0.0;
 $time    = date("Y-m-d H:i:s");
 
+$version = $_GET['version'] ?? '';
+$memfree = $_GET['memfree'] ?? '';
+$wanip   = $_GET['wanip'] ?? '';
+$lanip   = $_GET['lanip'] ?? '';
+
+
 // التحقق من الحقول الأساسية
 if (empty($mac) || empty($ip)) {
     http_response_code(400);
@@ -28,15 +34,19 @@ if (empty($mac) || empty($ip)) {
 
 // تجهيز الاستعلام
 $stmt = $conn->prepare("
-    INSERT INTO node (mac, name, ip, uptime, users, cpu, time)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO node (mac, name, ip, uptime, users, cpu, time, firmware, memfree, wan_ip, lan_ip)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         ip = VALUES(ip),
         uptime = VALUES(uptime),
         users = VALUES(users),
         cpu = VALUES(cpu),
-        time = VALUES(time)
+        time = VALUES(time),
+        firmware = VALUES(firmware),
+        memfree = VALUES(memfree),
+        wan_ip = VALUES(wan_ip),
+        lan_ip = VALUES(lan_ip)
 ");
 
 if (!$stmt) {
@@ -45,7 +55,7 @@ if (!$stmt) {
 }
 
 // ربط القيم
-$stmt->bind_param("ssssdds", $mac, $name, $ip, $uptime, $users, $cpu, $time);
+$stmt->bind_param("ssssidsssss", $mac, $name, $ip, $uptime, $users, $cpu, $time, $version, $memfree, $wanip, $lanip);
 
 // تنفيذ
 if ($stmt->execute()) {
