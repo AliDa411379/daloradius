@@ -18,7 +18,7 @@
 header('Content-Type: application/json');
 
 // Include balance functions
-require_once(__DIR__ . '/../library/balance_functions.php');
+require_once(__DIR__ . '/../common/library/balance_functions.php');
 
 // Database credentials - CHANGE THESE!
 define('DB_HOST', '172.30.16.200');

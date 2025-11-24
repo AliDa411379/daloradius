@@ -113,6 +113,22 @@
 
     //feed the sidebar variables
     $edit_username = $username_enc;
+    
+    if (!empty($username) && isset($_GET['sync_mikrotik']) && $_GET['sync_mikrotik'] == '1') {
+        $script_path = __DIR__ . '/../../contrib/scripts/mikrotik_attributes_sync_v2.php';
+        if (file_exists($script_path)) {
+            $output = [];
+            $return_var = 0;
+            exec("php " . escapeshellarg($script_path) . " " . escapeshellarg($username) . " 2>&1", $output, $return_var);
+            if ($return_var === 0) {
+                $successMsg = "User <strong>$username_enc</strong> has been synced to MikroTik successfully!";
+            } else {
+                $failureMsg = "Failed to sync user to MikroTik. Check logs for details.";
+            }
+        } else {
+            $failureMsg = "MikroTik sync script not found.";
+        }
+    }
 
     // from now on we can assume that $username is valid
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -356,6 +372,13 @@
 
                 $successMsg = sprintf("Successfully updated user <strong>%s</strong>", $username_enc);
                 $logAction .= sprintf("Successfully updated user %s on page: ", $username);
+                
+                if ($planName != $oldplanName) {
+                    $script_path = __DIR__ . '/../../contrib/scripts/mikrotik_attributes_sync_v2.php';
+                    if (file_exists($script_path)) {
+                        exec("php " . escapeshellarg($script_path) . " " . escapeshellarg($username) . " > /dev/null 2>&1 &");
+                    }
+                }
 
             } else { // if username != ""
                 $failureMsg = "You have specified an empty or invalid username";
@@ -839,6 +862,18 @@ EOF;
     }
 
     print_back_to_previous_page();
+    
+    if (!empty($username)) {
+        echo '<div class="container-fluid mt-3">';
+        echo '<div class="card">';
+        echo '<div class="card-header">MikroTik Integration</div>';
+        echo '<div class="card-body">';
+        echo '<p class="mb-2">Manually sync this user to MikroTik NAS:</p>';
+        echo '<a href="?username=' . urlencode($username) . '&sync_mikrotik=1" class="btn btn-primary btn-sm" onclick="return confirm(\'Sync user attributes to MikroTik?\');">🔄 Sync to MikroTik Now</a>';
+        echo '</div>';
+        echo '</div>';
+        echo '</div>';
+    }
 
     include('include/config/logging.php');
 
