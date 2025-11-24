@@ -1,0 +1,45 @@
+# DaloRADIUS - Cron Job Configuration
+# ERP Integration - Dual Subscription Model
+
+# ========================================
+# MONTHLY BILLING (26th of every month)
+# ========================================
+# Generate monthly invoices at midnight on the 26th
+0 0 26 * * /usr/bin/php /var/www/daloradius/contrib/scripts/generate_monthly_bills.php >> /var/log/daloradius/monthly_billing.log 2>&1
+
+# ========================================
+# BUNDLE EXPIRY CHECK (Hourly)
+# ========================================
+# Check and expire bundles every hour
+0 * * * * /usr/bin/php /var/www/daloradius/contrib/scripts/check_bundle_expiry.php >> /var/log/daloradius/bundle_expiry.log 2>&1
+
+# ========================================
+# OVERDUE INVOICE SUSPENSION (Daily at 1 AM)
+# ========================================
+# Suspend users with overdue invoices past grace period
+0 1 * * * /usr/bin/php /var/www/daloradius/contrib/scripts/suspend_unpaid_users.php >> /var/log/daloradius/suspension.log 2>&1
+
+# ========================================
+# USER REACTIVATION (Every 2 hours)
+# ========================================
+# Reactivate users who have paid their invoices
+0 */2 * * * /usr/bin/php /var/www/daloradius/contrib/scripts/reactivate_paid_users.php >> /var/log/daloradius/reactivation.log 2>&1
+
+# ========================================
+# BALANCE MANAGEMENT (Daily at 2 AM)
+# ========================================
+# Update balances from usage (MikroTik integration)
+0 2 * * * /usr/bin/php /var/www/daloradius/contrib/scripts/update_balances_from_usage_v2.php >> /var/log/daloradius/balance_update.log 2>&1
+
+# Sync MikroTik attributes (every 30 minutes)
+*/30 * * * * /usr/bin/php /var/www/daloradius/contrib/scripts/mikrotik_attributes_sync_v2.php >> /var/log/daloradius/mikrotik_sync.log 2>&1
+
+# ========================================
+# Installation Instructions:
+# ========================================
+# 1. Edit paths above to match your installation
+# 2. Update database credentials in each script
+# 3. Create log directory: mkdir -p /var/log/daloradius
+# 4. Install crontab: crontab -e
+# 5. Add the lines above
+# 6. Verify: crontab -l
