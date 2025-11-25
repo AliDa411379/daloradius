@@ -13,9 +13,9 @@
 require_once('auth.php');
 
 // Include required files
-require_once('../../app/common/includes/config_read.php');
-require_once('../../app/common/includes/db_open.php');
-require_once('../../app/common/library/BalanceManager.php');
+require_once('../../common/includes/config_read.php');
+require_once('../../common/includes/db_open.php');
+require_once('../../common/library/BalanceManager.php');
 
 // Only allow POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -54,25 +54,27 @@ if ($amount > 300000) {
 
 try {
     // Verify agent exists
-    $sql = sprintf("SELECT id, name FROM agents WHERE id = %d AND is_deleted = 0", $agentId);
+    $sql = sprintf("SELECT id, name FROM %s WHERE id = %d AND is_deleted = 0", 
+                   $configValues['CONFIG_DB_TBL_DALOAGENTS'], $agentId);
     $result = $dbSocket->query($sql);
     
-    if (!$result || $result->rowCount() === 0) {
+    if (DB::isError($result) || $result->numRows() === 0) {
         apiSendError('Agent not found');
     }
     
-    $agent = $result->fetch(PDO::FETCH_ASSOC);
+    $agent = $result->fetchRow(DB_FETCHMODE_ASSOC);
     
     // Get user info
-    $sql = sprintf("SELECT id, username, money_balance FROM userbillinfo WHERE username = '%s'", 
+    $sql = sprintf("SELECT id, username, money_balance FROM %s WHERE username = '%s'", 
+                   $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'],
                    $dbSocket->escapeSimple($username));
     $result = $dbSocket->query($sql);
     
-    if (!$result || $result->rowCount() === 0) {
+    if (DB::isError($result) || $result->numRows() === 0) {
         apiSendError('User not found');
     }
     
-    $user = $result->fetch(PDO::FETCH_ASSOC);
+    $user = $result->fetchRow(DB_FETCHMODE_ASSOC);
     $userId = $user['id'];
     $balanceBefore = floatval($user['money_balance']);
     

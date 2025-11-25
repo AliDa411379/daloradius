@@ -168,49 +168,53 @@
                 } else {
                 
                 try {
-                    $user_data = get_user_balance_by_id($mysqli, $user_id);
-                    if (!$user_data) {
-                        throw new Exception("User not found");
-                    }
+                    // Initialize BalanceManager
+                    $balanceManager = new BalanceManager($mysqli);
                     
-                    $username = $user_data['username'];
-                    $old_balance = $user_data['balance'];
-                    $new_balance = $old_balance + $add_amount;
-                    
-                    $sql_update = sprintf("UPDATE %s SET money_balance = %.2f WHERE id = %d",
-                                         $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'],
-                                         $new_balance,
-                                         intval($user_id));
-                    $res = $dbSocket->query($sql_update);
-                    $logDebugSQL .= "$sql_update;\n";
-                    
-                    if (DB::isError($res)) {
-                        throw new Exception("Failed to update balance: " . $res->getMessage());
-                    }
-                    
-                    $successMsg = sprintf(
-                        "<strong>Balance Added Successfully!</strong><br><br>" .
-                        "Username: <strong>%s</strong><br>" .
-                        "Amount Added: <strong>$%.2f</strong><br>" .
-                        "Previous Balance: <strong>$%.2f</strong><br>" .
-                        "New Balance: <strong>$%.2f</strong><br>" .
-                        "Notes: <strong>%s</strong><br><br>" .
-                        '<a href="bill-payments-list.php?username=%s" title="Payment History">View Payment History</a>',
-                        htmlspecialchars($username),
+                    // Add balance using BalanceManager
+                    $result = $balanceManager->addBalance(
+                        $user_id,
+                        '', // Username will be fetched by BalanceManager if not provided, or we can fetch it
                         $add_amount,
-                        $old_balance,
-                        $new_balance,
-                        htmlspecialchars($add_notes),
-                        urlencode($username)
+                        $operator,
+                        $add_notes,
+                        'manual', // Reference type
+                        null      // Reference ID
                     );
                     
-                    $logAction .= sprintf(
-                        "Successfully added balance: User=%s, Amount=$%.2f, OldBalance=$%.2f, NewBalance=$%.2f on page: ",
-                        $username,
-                        $add_amount,
-                        $old_balance,
-                        $new_balance
-                    );
+                    if ($result['success']) {
+                        // Fetch updated user data for display
+                        $user_data = get_user_balance_by_id($mysqli, $user_id);
+                        $username = $user_data['username'];
+                        $new_balance = $result['new_balance'];
+                        $old_balance = $new_balance - $add_amount; // Calculate old balance
+                        
+                        $successMsg = sprintf(
+                            "<strong>Balance Added Successfully!</strong><br><br>" .
+                            "Username: <strong>%s</strong><br>" .
+                            "Amount Added: <strong>$%.2f</strong><br>" .
+                            "Previous Balance: <strong>$%.2f</strong><br>" .
+                            "New Balance: <strong>$%.2f</strong><br>" .
+                            "Notes: <strong>%s</strong><br><br>" .
+                            '<a href="bill-payments-list.php?username=%s" title="Payment History">View Payment History</a>',
+                            htmlspecialchars($username),
+                            $add_amount,
+                            $old_balance,
+                            $new_balance,
+                            htmlspecialchars($add_notes),
+                            urlencode($username)
+                        );
+                        
+                        $logAction .= sprintf(
+                            "Successfully added balance: User=%s, Amount=$%.2f, OldBalance=$%.2f, NewBalance=$%.2f on page: ",
+                            $username,
+                            $add_amount,
+                            $old_balance,
+                            $new_balance
+                        );
+                    } else {
+                        throw new Exception($result['message']);
+                    }
                     
                 } catch (Exception $e) {
                     $failureMsg = "<strong>Balance Addition Failed:</strong><br>" . htmlspecialchars($e->getMessage());

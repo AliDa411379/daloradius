@@ -13,8 +13,8 @@
 require_once('auth.php');
 
 // Include required files
-require_once('../../app/common/includes/config_read.php');
-require_once('../../app/common/includes/db_open.php');
+require_once('../../common/includes/config_read.php');
+require_once('../../common/includes/db_open.php');
 
 // Get request method and data
 $method = $_SERVER['REQUEST_METHOD'];

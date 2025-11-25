@@ -79,6 +79,12 @@
     $planCurrency = (array_key_exists('planCurrency', $_POST) && !empty(trim($_POST['planCurrency']))) ? trim($_POST['planCurrency']) : "";
     $planGroup = (array_key_exists('planGroup', $_POST) && !empty(trim($_POST['planGroup']))) ? trim($_POST['planGroup']) : "";
     $groups = (array_key_exists('groups', $_POST) && isset($_POST['groups'])) ? $_POST['groups'] : array();
+    
+    $is_bundle = (array_key_exists('is_bundle', $_POST) && !empty(trim($_POST['is_bundle'])) &&
+                  in_array(strtolower(trim($_POST['is_bundle'])), array("1", "0")))
+               ? intval(trim($_POST['is_bundle'])) : 0;
+    $bundle_validity_days = (array_key_exists('bundle_validity_days', $_POST) && !empty(trim($_POST['bundle_validity_days']))) ? intval(trim($_POST['bundle_validity_days'])) : 0;
+    $bundle_validity_hours = (array_key_exists('bundle_validity_hours', $_POST) && !empty(trim($_POST['bundle_validity_hours']))) ? intval(trim($_POST['bundle_validity_hours'])) : 0;
 
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -114,9 +120,12 @@
                                                     planTrafficUp, planTrafficDown, planTrafficRefillCost, planRecurring,
                                                     planRecurringPeriod, planRecurringBillingSchedule, planCost,
                                                     planSetupCost, planTax, planCurrency, planGroup, planActive,
+                                                    is_bundle, bundle_validity_days, bundle_validity_hours,
                                                     creationdate, creationby, updatedate, updateby)
                                             VALUES (0, '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s',
-                                                    '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', NULL, NULL)",
+                                                    '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s',
+                                                    %d, %d, %d,
+                                                    '%s', '%s', NULL, NULL)",
                                    $configValues['CONFIG_DB_TBL_DALOBILLINGPLANS'], $dbSocket->escapeSimple($planName),
                                    $dbSocket->escapeSimple($planId), $dbSocket->escapeSimple($planType),
                                    $dbSocket->escapeSimple($planTimeBank), $dbSocket->escapeSimple($planTimeType),
@@ -127,7 +136,9 @@
                                    $dbSocket->escapeSimple($planRecurringPeriod), $dbSocket->escapeSimple($planRecurringBillingSchedule),
                                    $dbSocket->escapeSimple($planCost), $dbSocket->escapeSimple($planSetupCost),
                                    $dbSocket->escapeSimple($planTax), $dbSocket->escapeSimple($planCurrency),
-                                   $dbSocket->escapeSimple($planGroup), $dbSocket->escapeSimple($planActive), $current_datetime, $currBy);
+                                   $dbSocket->escapeSimple($planGroup), $dbSocket->escapeSimple($planActive),
+                                   $is_bundle, $bundle_validity_days, $bundle_validity_hours,
+                                   $current_datetime, $currBy);
                     $res = $dbSocket->query($sql);
                     $logDebugSQL .= "$sql;\n";
                     
@@ -274,6 +285,31 @@
                                         "selected_value" => $planCurrency,
                                         'tooltipText' => t('Tooltip','planCurrencyTooltip'),
                                      );
+        
+        $input_descriptors0[] = array(
+                                        "type" => "select",
+                                        "options" => array("0" => "No", "1" => "Yes"),
+                                        "caption" => "Is Bundle",
+                                        "name" => "is_bundle",
+                                        "selected_value" => (string)$is_bundle,
+                                        "tooltipText" => "Mark this as a prepaid bundle (will appear in bundle purchase)",
+                                     );
+        
+        $input_descriptors0[] = array(
+                                    'name' => 'bundle_validity_days',
+                                    'type' => 'number',
+                                    'caption' => 'Bundle Validity (Days)',
+                                    'value' => $bundle_validity_days,
+                                    'tooltipText' => 'How many days the bundle is valid after activation (only for bundles)',
+                                 );
+        
+        $input_descriptors0[] = array(
+                                    'name' => 'bundle_validity_hours',
+                                    'type' => 'number',
+                                    'caption' => 'Bundle Validity (Hours)',
+                                    'value' => $bundle_validity_hours,
+                                    'tooltipText' => 'Additional hours for bundle validity (only for bundles)',
+                                 );
 
         // descriptors 1
         $input_descriptors1 = array();

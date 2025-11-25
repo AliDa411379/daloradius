@@ -200,7 +200,13 @@
                                        "macaddress", "pincode", "submit", "firstname", "lastname", "email",
                                        "department", "company", "workphone", "homephone", "mobilephone", "address", "city",
                                        "state", "country", "zip", "notes", "selected_agents", "changeUserInfo", "copycontact", 
-                                       "portalLoginPassword", "enableUserPortalLogin", "csrf_token", "submit"
+                                       "portalLoginPassword", "enableUserPortalLogin", "csrf_token", "submit",
+                                       "bi_contactperson", "bi_company", "bi_email", "bi_phone", "bi_address",
+                                       "bi_city", "bi_state", "bi_country", "bi_zip", "bi_paymentmethod", "bi_cash", "bi_creditcardname",
+                                       "bi_creditcardnumber", "bi_creditcardverification", "bi_creditcardtype", "bi_creditcardexp",
+                                       "bi_notes", "bi_changeuserbillinfo", "bi_lead", "bi_coupon", "bi_ordertaker", "bi_billstatus",
+                                       "bi_lastbill", "bi_nextbill", "bi_nextinvoicedue", "bi_billdue", "bi_postalinvoice", "bi_faxinvoice",
+                                       "bi_emailinvoice", "bi_planname", "bi_subscription_type"
                                      );
 
                     $attributesCount = handleAttributes($dbSocket, $u, $skipList);
@@ -231,6 +237,77 @@
                                    );
 
                     $addedUserInfo = (add_user_info($dbSocket, $u, $params)) ? "stored" : "nothing to store";
+
+                    // adding user billing info
+                    $bi_contactperson = (isset($_POST['bi_contactperson'])) ? $_POST['bi_contactperson'] : "";
+                    $bi_company = (isset($_POST['bi_company'])) ? $_POST['bi_company'] : "";
+                    $bi_email = (isset($_POST['bi_email'])) ? $_POST['bi_email'] : "";
+                    $bi_phone = (isset($_POST['bi_phone'])) ? $_POST['bi_phone'] : "";
+                    $bi_address = (isset($_POST['bi_address'])) ? $_POST['bi_address'] : "";
+                    $bi_city = (isset($_POST['bi_city'])) ? $_POST['bi_city'] : "";
+                    $bi_state = (isset($_POST['bi_state'])) ? $_POST['bi_state'] : "";
+                    $bi_country = (isset($_POST['bi_country'])) ? $_POST['bi_country'] : "";
+                    $bi_zip = (isset($_POST['bi_zip'])) ? $_POST['bi_zip'] : "";
+                    $bi_paymentmethod = (isset($_POST['bi_paymentmethod'])) ? $_POST['bi_paymentmethod'] : "";
+                    $bi_cash = (isset($_POST['bi_cash'])) ? $_POST['bi_cash'] : "";
+                    $bi_creditcardname = (isset($_POST['bi_creditcardname'])) ? $_POST['bi_creditcardname'] : "";
+                    $bi_creditcardnumber = (isset($_POST['bi_creditcardnumber'])) ? $_POST['bi_creditcardnumber'] : "";
+                    $bi_creditcardverification = (isset($_POST['bi_creditcardverification'])) ? $_POST['bi_creditcardverification'] : "";
+                    $bi_creditcardtype = (isset($_POST['bi_creditcardtype'])) ? $_POST['bi_creditcardtype'] : "";
+                    $bi_creditcardexp = (isset($_POST['bi_creditcardexp'])) ? $_POST['bi_creditcardexp'] : "";
+                    $bi_notes = (isset($_POST['bi_notes'])) ? $_POST['bi_notes'] : "";
+                    $bi_changeuserbillinfo = (isset($_POST['bi_changeuserbillinfo'])) ? $_POST['bi_changeuserbillinfo'] : "";
+                    $bi_lead = (isset($_POST['bi_lead'])) ? $_POST['bi_lead'] : "";
+                    $bi_coupon = (isset($_POST['bi_coupon'])) ? $_POST['bi_coupon'] : "";
+                    $bi_ordertaker = (isset($_POST['bi_ordertaker'])) ? $_POST['bi_ordertaker'] : "";
+                    $bi_billstatus = (isset($_POST['bi_billstatus'])) ? $_POST['bi_billstatus'] : "";
+                    $bi_lastbill = (isset($_POST['bi_lastbill'])) ? $_POST['bi_lastbill'] : "";
+                    $bi_nextbill = (isset($_POST['bi_nextbill'])) ? $_POST['bi_nextbill'] : "";
+                    $bi_nextinvoicedue = (isset($_POST['bi_nextinvoicedue'])) ? $_POST['bi_nextinvoicedue'] : "";
+                    $bi_billdue = (isset($_POST['bi_billdue'])) ? $_POST['bi_billdue'] : "";
+                    $bi_postalinvoice = (isset($_POST['bi_postalinvoice'])) ? $_POST['bi_postalinvoice'] : "";
+                    $bi_faxinvoice = (isset($_POST['bi_faxinvoice'])) ? $_POST['bi_faxinvoice'] : "";
+                    $bi_emailinvoice = (isset($_POST['bi_emailinvoice'])) ? $_POST['bi_emailinvoice'] : "";
+                    $bi_planname = (isset($_POST['bi_planname'])) ? $_POST['bi_planname'] : "";
+                    $bi_subscription_type = (isset($_POST['bi_subscription_type'])) ? $_POST['bi_subscription_type'] : "";
+
+                    $bill_params = array(
+                        "contactperson" => $bi_contactperson,
+                        "company" => $bi_company,
+                        "email" => $bi_email,
+                        "phone" => $bi_phone,
+                        "address" => $bi_address,
+                        "city" => $bi_city,
+                        "state" => $bi_state,
+                        "country" => $bi_country,
+                        "zip" => $bi_zip,
+                        "paymentmethod" => $bi_paymentmethod,
+                        "cash" => $bi_cash,
+                        "creditcardname" => $bi_creditcardname,
+                        "creditcardnumber" => $bi_creditcardnumber,
+                        "creditcardverification" => $bi_creditcardverification,
+                        "creditcardtype" => $bi_creditcardtype,
+                        "creditcardexp" => $bi_creditcardexp,
+                        "notes" => $bi_notes,
+                        "changeuserbillinfo" => $bi_changeuserbillinfo,
+                        "lead" => $bi_lead,
+                        "coupon" => $bi_coupon,
+                        "ordertaker" => $bi_ordertaker,
+                        "billstatus" => $bi_billstatus,
+                        "lastbill" => $bi_lastbill,
+                        "nextbill" => $bi_nextbill,
+                        "nextinvoicedue" => $bi_nextinvoicedue,
+                        "billdue" => $bi_billdue,
+                        "postalinvoice" => $bi_postalinvoice,
+                        "faxinvoice" => $bi_faxinvoice,
+                        "emailinvoice" => $bi_emailinvoice,
+                        "planname" => $bi_planname,
+                        "subscription_type" => $bi_subscription_type,
+                        "creationdate" => $current_datetime,
+                        "creationby" => $currBy
+                    );
+
+                    $addedBillInfo = (add_user_billing_info($dbSocket, $u, $bill_params)) ? "stored" : "nothing to store";
 
                     // adding agent assignments (replaced billing info)
                     $addedAgentInfo = "nothing to store";
@@ -272,6 +349,7 @@
                                 . sprintf("<li><strong>attributes count</strong>: %d</li>", $attributesCount)
                                 . sprintf("<li><strong>groups count</strong>: %d</li>", $groupsCount)
                                 . sprintf("<li><strong>user info</strong>: %s</li>", $addedUserInfo)
+                                . sprintf("<li><strong>billing info</strong>: %s</li>", $addedBillInfo)
                                 . sprintf("<li><strong>agent assignments</strong>: %s</li>", $addedAgentInfo)
                                 . "</ul>"
 

@@ -12,11 +12,11 @@
 header('Content-Type: application/json');
 
 // Include required files
-require_once('../../app/common/includes/config_read.php');
-require_once('../../app/common/includes/db_open.php');
-require_once('../../app/common/library/BalanceManager.php');
-require_once('../../app/common/library/BundleManager.php');
-require_once('../../app/common/library/RadiusAccessManager.php');
+require_once('../../common/includes/config_read.php');
+require_once('../../common/includes/db_open.php');
+require_once('../../common/library/BalanceManager.php');
+require_once('../../common/library/BundleManager.php');
+require_once('../../common/library/RadiusAccessManager.php');
 
 // Helper functions
 function apiSendError($message, $code = 400) {

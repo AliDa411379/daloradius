@@ -36,6 +36,7 @@ $cat_subcat_tree = array(
                             "rep" => array( "logs", "stat", "batch", "hb", ),
                             "acct" => array( "plans", "custom", "hotspot", "maintenance", ),
                             "bill" => array( "plans", "rates", "merchant", "history", "invoice", "payments", ),
+                            "bundle" => array( "purchase", "list", ),
                             "gis" => array(),
                             "graphs" => array(),
                             "config" => array( "reports", "maint", "operators", "backup", "mail", ),

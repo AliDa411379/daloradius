@@ -4,17 +4,24 @@
  * 
  * Manages RADIUS group assignments and blocking for both subscription types
  * Integrates with FreeRADIUS via radusergroup table
+ * Also handles Mikrotik attribute conversion and setting
  * 
  * @package DaloRADIUS
  * @subpackage Library
  */
 
+// Include Mikrotik integration functions for attribute conversion
+require_once(__DIR__ . '/../../../contrib/scripts/mikrotik_integration_functions.php');
+
 class RadiusAccessManager {
     private $db;
     private $table_radusergroup = 'radusergroup';
     private $table_radcheck = 'radcheck';
+    private $table_radreply = 'radreply';
+    private $table_billing_plans = 'billing_plans';
     private $table_billing_plans_profiles = 'billing_plans_profiles';
     private $table_billing_history = 'billing_history';
+    private $table_userbillinfo = 'userbillinfo';
     
     const BLOCK_GROUP = 'block_user';
     
@@ -24,6 +31,7 @@ class RadiusAccessManager {
     
     /**
      * Grant access by assigning user to plan's RADIUS groups
+     * Also sets Mikrotik attributes based on plan
      * 
      * @param string $username Username
      * @param string $planName Plan name
@@ -73,6 +81,9 @@ class RadiusAccessManager {
                 }
             }
             
+            // Set Mikrotik attributes based on plan
+            $attributesSet = $this->setMikrotikAttributesForPlan($username, $planName);
+            
             // Log in billing history
             $this->logAccessChange($username, "Access granted - Assigned to plan: $planName");
             
@@ -81,6 +92,7 @@ class RadiusAccessManager {
             return [
                 'success' => true,
                 'groups_assigned' => $groupsAssigned,
+                'attributes_set' => $attributesSet,
                 'message' => "Access granted successfully"
             ];
             
@@ -292,5 +304,102 @@ class RadiusAccessManager {
             $this->db->rollback();
             return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+    
+    /**
+     * Set Mikrotik RADIUS attributes based on plan
+     * Uses mikrotik_convert_traffic() and mikrotik_convert_time() for consistency
+     * 
+     * @param string $username Username
+     * @param string $planName Plan name
+     * @return bool Success status
+     */
+    private function setMikrotikAttributesForPlan($username, $planName) {
+        try {
+            // Get plan details
+            $planName_esc = $this->db->real_escape_string($planName);
+            $sql = sprintf(
+                "SELECT planType, planTimeBank, planTrafficTotal FROM %s WHERE planName = '%s'",
+                $this->table_billing_plans,
+                $planName_esc
+            );
+            
+            $result = $this->db->query($sql);
+            if (!$result || $result->num_rows === 0) {
+                mikrotik_log("Plan $planName not found for Mikrotik attribute setting", 'WARNING');
+                return false;
+            }
+            
+            $plan = $result->fetch_assoc();
+            
+            // Get user's current balances
+            $username_esc = $this->db->real_escape_string($username);
+            $sql = sprintf(
+                "SELECT timebank_balance, traffic_balance FROM %s WHERE username = '%s'",
+                $this->table_userbillinfo,
+                $username_esc
+            );
+            
+            $result = $this->db->query($sql);
+            if (!$result || $result->num_rows === 0) {
+                mikrotik_log("User $username not found in userbillinfo", 'WARNING');
+                return false;
+            }
+            
+            $user = $result->fetch_assoc();
+            
+            // Determine balances to use (user balance or plan default)
+            $traffic_balance = !empty($user['traffic_balance']) ? 
+                              floatval($user['traffic_balance']) : 
+                              floatval($plan['planTrafficTotal'] ?: 0);
+            
+            $time_balance = !empty($user['timebank_balance']) ? 
+                           floatval($user['timebank_balance']) : 
+                           floatval($plan['planTimeBank'] ?: 0);
+            
+            mikrotik_log("Setting Mikrotik attributes for $username - Plan: $planName, Traffic: {$traffic_balance}MB, Time: {$time_balance}min");
+            
+            $success = true;
+            
+            // Set traffic attributes using mikrotik_convert_traffic()
+            if (stripos($plan['planType'], 'Traffic') !== false || $traffic_balance > 0) {
+                $traffic_attrs = mikrotik_convert_traffic($traffic_balance);
+                $success &= mikrotik_set_radius_attribute($this->db, $username, 'Mikrotik-Total-Limit-Gigawords', $traffic_attrs['gigawords']);
+                $success &= mikrotik_set_radius_attribute($this->db, $username, 'Mikrotik-Total-Limit', $traffic_attrs['bytes']);
+            } else {
+                $success &= mikrotik_set_radius_attribute($this->db, $username, 'Mikrotik-Total-Limit-Gigawords', '0');
+                $success &= mikrotik_set_radius_attribute($this->db, $username, 'Mikrotik-Total-Limit', '0');
+            }
+            
+            // Set time attributes using mikrotik_convert_time()
+            if (stripos($plan['planType'], 'Time') !== false || $time_balance > 0) {
+                $session_timeout = mikrotik_convert_time($time_balance);
+                $success &= mikrotik_set_radius_attribute($this->db, $username, 'Session-Timeout', $session_timeout);
+            } else {
+                $success &= mikrotik_set_radius_attribute($this->db, $username, 'Session-Timeout', '0');
+            }
+            
+            if ($success) {
+                mikrotik_log("Successfully set Mikrotik attributes for $username");
+            } else {
+                mikrotik_log("Some errors occurred while setting Mikrotik attributes for $username", 'WARNING');
+            }
+            
+            return $success;
+            
+        } catch (Exception $e) {
+            mikrotik_log("Error setting Mikrotik attributes: " . $e->getMessage(), 'ERROR');
+            return false;
+        }
+    }
+    
+    /**
+     * Remove Mikrotik RADIUS attributes for a user
+     * 
+     * @param string $username Username
+     * @return bool Success status
+     */
+    public function removeMikrotikAttributes($username) {
+        return mikrotik_remove_user_attributes($this->db, $username);
     }
 }

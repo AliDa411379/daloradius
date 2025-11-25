@@ -33,6 +33,24 @@ $_input_descriptors0 = array();
 
 $_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','PlanName'), 'disabled' => true,
                                'value' => ((isset($bi_planname)) ? $bi_planname : ''), 'name' => 'bi_planname' );
+
+// ERP Integration: Subscription Type Selection
+$subscription_type_options = array(
+    '' => 'Not Set',
+    'monthly' => 'Monthly Subscription',
+    'prepaid' => 'Prepaid (Bundles)'
+);
+
+$_input_descriptors0[] = array( 
+    'type' => 'select', 
+    'caption' => 'Subscription Type', 
+    'name' => 'bi_subscription_type',
+    'id' => 'subscription_type',
+    'options' => $subscription_type_options,
+    'selected_value' => ((isset($bi_subscription_type)) ? $bi_subscription_type : ''),
+    'tooltipText' => 'Choose between monthly recurring billing or prepaid bundle model'
+);
+
 $_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','ContactPerson'),
                                'value' => ((isset($bi_contactperson)) ? $bi_contactperson : ''), 'name' => 'bi_contactperson' );
 $_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','Company'),

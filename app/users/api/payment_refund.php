@@ -13,9 +13,9 @@
 header('Content-Type: application/json');
 
 // Include required files
-require_once('../../../app/common/includes/config_read.php');
-require_once('../../../app/common/includes/db_open.php');
-require_once('../../../app/common/library/BalanceManager.php');
+require_once('../../common/includes/config_read.php');
+require_once('../../common/includes/db_open.php');
+require_once('../../common/library/BalanceManager.php');
 
 function apiSendError($message, $code = 400) {
     http_response_code($code);
