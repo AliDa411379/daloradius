@@ -119,7 +119,7 @@ ini_set('display_errors', 1);
                 $bundle_plans[intval($row[0])] = array(
                     'name' => $row[1],
                     'cost' => floatval($row[2]),
-                    'currency' => $row[3] ? $row[3] : 'USD',
+                    'currency' => $row[3] ? $row[3] : 'SYP',
                     'validity_days' => intval($row[4]),
                     'validity_hours' => intval($row[5]),
                     'traffic_mb' => floatval($row[6])
@@ -138,21 +138,20 @@ ini_set('display_errors', 1);
     $valid_users = array();
     try {
         if ($is_current_operator_agent && $current_agent_id > 0) {
-            $sql = sprintf("SELECT ub.id, u.username, ub.money_balance, ub.planName
-                            FROM %s u
+            $sql = sprintf("SELECT ub.id, ub.username, ub.money_balance, ub.planName
+                            FROM %s ub
+                            INNER JOIN %s u ON ub.username = u.username
                             INNER JOIN user_agent ua ON u.id = ua.user_id
-                            LEFT JOIN %s ub ON u.username = ub.username
-                            WHERE ua.agent_id = %d
-                            ORDER BY u.username",
-                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+                            WHERE ua.agent_id = %d AND ub.id IS NOT NULL
+                            ORDER BY ub.username",
                            $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'],
+                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
                            intval($current_agent_id));
         } else {
-            $sql = sprintf("SELECT ub.id, u.username, ub.money_balance, ub.planName
-                            FROM %s u
-                            LEFT JOIN %s ub ON u.username = ub.username
-                            ORDER BY u.username",
-                           $configValues['CONFIG_DB_TBL_DALOUSERINFO'],
+            $sql = sprintf("SELECT ub.id, ub.username, ub.money_balance, ub.planName
+                            FROM %s ub
+                            WHERE ub.id IS NOT NULL
+                            ORDER BY ub.username",
                            $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO']);
         }
         
@@ -161,11 +160,14 @@ ini_set('display_errors', 1);
         
         if (!DB::isError($res) && $res) {
             while ($row = $res->fetchRow()) {
-                $valid_users[intval($row[0])] = array(
-                    'username' => $row[1],
-                    'balance' => floatval($row[2]),
-                    'plan' => $row[3]
-                );
+                $billinfo_id = intval($row[0]);
+                if ($billinfo_id > 0) {
+                    $valid_users[$billinfo_id] = array(
+                        'username' => $row[1],
+                        'balance' => floatval($row[2]),
+                        'plan' => $row[3]
+                    );
+                }
             }
         }
     } catch (Exception $e) {

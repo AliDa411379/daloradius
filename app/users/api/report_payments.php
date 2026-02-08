@@ -6,14 +6,13 @@
  * GET: /api/report_payments.php?start_date=2025-01-01&end_date=2025-01-31&agent_id=1
  */
 
+
 require_once(__DIR__ . '/config.php');
 require_once(__DIR__ . '/auth.php');
+require_once(__DIR__ . '/../../common/includes/config_read.php');
 
-// Handle preflight
-apiHandlePreflight();
-
-// Authenticate
-apiAuthenticate();
+// Authentication is handled by auth.php
+// No need to call apiHandlePreflight() or apiAuthenticate() explicitly
 
 // Only GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -36,7 +35,12 @@ if (empty($end_date)) {
 }
 
 try {
-    $db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
+    $db = new mysqli(
+        $configValues['CONFIG_DB_HOST'],
+        $configValues['CONFIG_DB_USER'],
+        $configValues['CONFIG_DB_PASS'],
+        $configValues['CONFIG_DB_NAME']
+    );
     
     if ($db->connect_error) {
         throw new Exception('Database connection failed: ' . $db->connect_error);
@@ -46,18 +50,20 @@ try {
     
     // Build query
     $where_clauses = array("ap.payment_date BETWEEN ? AND ?");
-    $params = array('ss', $start_date . ' 00:00:00', $end_date . ' 23:59:59');
+    $start_date_full = $start_date . ' 00:00:00';
+    $end_date_full = $end_date . ' 23:59:59';
+    $params = array('ss', &$start_date_full, &$end_date_full);
     
     if ($agent_id > 0) {
         $where_clauses[] = "ap.agent_id = ?";
         $params[0] .= 'i';
-        $params[] = $agent_id;
+        $params[] = &$agent_id;
     }
     
     if (!empty($payment_type) && in_array($payment_type, array('balance_topup', 'bundle_purchase'))) {
         $where_clauses[] = "ap.payment_type = ?";
         $params[0] .= 's';
-        $params[] = $payment_type;
+        $params[] = &$payment_type;
     }
     
     $where_sql = implode(' AND ', $where_clauses);
@@ -75,7 +81,8 @@ try {
                     WHERE $where_sql";
     
     $stmt = $db->prepare($summary_sql);
-    $stmt->bind_param(...$params);
+    $stmt = $db->prepare($summary_sql);
+    call_user_func_array(array($stmt, 'bind_param'), $params);
     $stmt->execute();
     $summary = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -88,22 +95,27 @@ try {
                         ap.username,
                         ap.payment_type,
                         ap.amount,
-                        ap.balance_before,
-                        ap.balance_after,
-                        ap.bundle_plan_id,
+                        ap.user_balance_before as balance_before,
+                        ap.user_balance_after as balance_after,
+                        ub.plan_id as bundle_plan_id,
                         bp.planName as bundle_name,
                         ap.payment_method,
                         ap.payment_date,
                         ap.notes
                     FROM agent_payments ap
-                    LEFT JOIN daloagents a ON ap.agent_id = a.id
-                    LEFT JOIN billing_plans bp ON ap.bundle_plan_id = bp.id
+                    LEFT JOIN {$configValues['CONFIG_DB_TBL_DALOAGENTS']} a ON ap.agent_id = a.id
+                    LEFT JOIN user_bundles ub ON (ap.reference_id = ub.id AND ap.reference_type = 'bundle')
+                    LEFT JOIN {$configValues['CONFIG_DB_TBL_DALOBILLINGPLANS']} bp ON ub.plan_id = bp.id
                     WHERE $where_sql
                     ORDER BY ap.payment_date DESC
                     LIMIT 1000";
     
     $stmt = $db->prepare($details_sql);
-    $stmt->bind_param(...$params);
+    if (!$stmt) {
+        throw new Exception('Prepare failed: ' . $db->error);
+    }
+    $stmt = $db->prepare($details_sql);
+    call_user_func_array(array($stmt, 'bind_param'), $params);
     $stmt->execute();
     $result = $stmt->get_result();
     
@@ -139,13 +151,17 @@ try {
                         COUNT(*) as transaction_count,
                         SUM(ap.amount) as total_amount
                     FROM agent_payments ap
-                    LEFT JOIN daloagents a ON ap.agent_id = a.id
+                    LEFT JOIN {$configValues['CONFIG_DB_TBL_DALOAGENTS']} a ON ap.agent_id = a.id
                     WHERE $where_sql
                     GROUP BY ap.agent_id, a.name
                     ORDER BY total_amount DESC";
     
     $stmt = $db->prepare($by_agent_sql);
-    $stmt->bind_param(...$params);
+    if (!$stmt) {
+        throw new Exception('Prepare failed: ' . $db->error);
+    }
+    $stmt = $db->prepare($by_agent_sql);
+    call_user_func_array(array($stmt, 'bind_param'), $params);
     $stmt->execute();
     $result = $stmt->get_result();
     
@@ -184,17 +200,12 @@ try {
         'transactions' => $transactions
     );
     
-    apiLogRequest(array(
-        'start_date' => $start_date,
-        'end_date' => $end_date,
-        'agent_id' => $agent_id,
-        'total_results' => count($transactions)
-    ));
+    // Request logging is handled by auth.php
     
-    apiSendSuccess('Payment report generated', $response);
+    apiSendSuccess(array_merge(['message' => 'Payment report generated'], $response));
     
 } catch (Exception $e) {
-    apiLogError($e->getMessage());
+    logApiError(basename($_SERVER['PHP_SELF']), $e->getMessage());
     apiSendError('Report generation failed: ' . $e->getMessage());
 }
 ?>

@@ -6,14 +6,13 @@
  * GET: /api/report_bundle_purchases.php?start_date=2025-01-01&end_date=2025-01-31&agent_id=1
  */
 
+
 require_once(__DIR__ . '/config.php');
 require_once(__DIR__ . '/auth.php');
+require_once(__DIR__ . '/../../common/includes/config_read.php');
 
-// Handle preflight
-apiHandlePreflight();
-
-// Authenticate
-apiAuthenticate();
+// Authentication is handled by auth.php
+// No need to call apiHandlePreflight() or apiAuthenticate() explicitly
 
 // Only GET
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
@@ -37,7 +36,12 @@ if (empty($end_date)) {
 }
 
 try {
-    $db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
+    $db = new mysqli(
+        $configValues['CONFIG_DB_HOST'],
+        $configValues['CONFIG_DB_USER'],
+        $configValues['CONFIG_DB_PASS'],
+        $configValues['CONFIG_DB_NAME']
+    );
     
     if ($db->connect_error) {
         throw new Exception('Database connection failed: ' . $db->connect_error);
@@ -47,24 +51,26 @@ try {
     
     // Build query with filters
     $where_clauses = array("ub.purchase_date BETWEEN ? AND ?");
-    $params = array('ss', $start_date . ' 00:00:00', $end_date . ' 23:59:59');
+    $start_date_full = $start_date . ' 00:00:00';
+    $end_date_full = $end_date . ' 23:59:59';
+    $params = array('ss', &$start_date_full, &$end_date_full);
     
     if ($agent_id > 0) {
         $where_clauses[] = "ua.agent_id = ?";
         $params[0] .= 'i';
-        $params[] = $agent_id;
+        $params[] = &$agent_id;
     }
     
     if (!empty($status) && in_array($status, array('active', 'expired', 'used'))) {
         $where_clauses[] = "ub.status = ?";
         $params[0] .= 's';
-        $params[] = $status;
+        $params[] = &$status;
     }
     
     if (!empty($username)) {
         $where_clauses[] = "ub.username = ?";
         $params[0] .= 's';
-        $params[] = $username;
+        $params[] = &$username;
     }
     
     $where_sql = implode(' AND ', $where_clauses);
@@ -77,13 +83,16 @@ try {
                         COUNT(CASE WHEN ub.status = 'active' THEN 1 END) as active_bundles,
                         COUNT(CASE WHEN ub.status = 'expired' THEN 1 END) as expired_bundles
                     FROM user_bundles ub
-                    INNER JOIN billing_plans bp ON ub.plan_id = bp.id
-                    LEFT JOIN userinfo ui ON ub.username = ui.username
+                    INNER JOIN {$configValues['CONFIG_DB_TBL_DALOBILLINGPLANS']} bp ON ub.plan_id = bp.id
+                    LEFT JOIN {$configValues['CONFIG_DB_TBL_DALOUSERINFO']} ui ON ub.username = ui.username
                     LEFT JOIN user_agent ua ON ui.id = ua.user_id
                     WHERE $where_sql";
     
     $stmt = $db->prepare($summary_sql);
-    $stmt->bind_param(...$params);
+    if (!$stmt) {
+        throw new Exception('Prepare failed: ' . $db->error);
+    }
+    call_user_func_array(array($stmt, 'bind_param'), $params);
     $stmt->execute();
     $summary = $stmt->get_result()->fetch_assoc();
     $stmt->close();
@@ -98,19 +107,20 @@ try {
                         ub.purchase_date,
                         ub.activation_date,
                         ub.expiry_date,
-                        ub.status,
-                        bp.bundle_validity_days,
-                        bp.bundle_validity_hours
+                        ub.status
                     FROM user_bundles ub
-                    INNER JOIN billing_plans bp ON ub.plan_id = bp.id
-                    LEFT JOIN userinfo ui ON ub.username = ui.username
+                    INNER JOIN {$configValues['CONFIG_DB_TBL_DALOBILLINGPLANS']} bp ON ub.plan_id = bp.id
+                    LEFT JOIN {$configValues['CONFIG_DB_TBL_DALOUSERINFO']} ui ON ub.username = ui.username
                     LEFT JOIN user_agent ua ON ui.id = ua.user_id
                     WHERE $where_sql
                     ORDER BY ub.purchase_date DESC
                     LIMIT 1000";
     
     $stmt = $db->prepare($details_sql);
-    $stmt->bind_param(...$params);
+    if (!$stmt) {
+        throw new Exception('Prepare failed: ' . $db->error);
+    }
+    call_user_func_array(array($stmt, 'bind_param'), $params);
     $stmt->execute();
     $result = $stmt->get_result();
     
@@ -139,8 +149,8 @@ try {
             'expiry_date' => $row['expiry_date'],
             'status' => $row['status'],
             'validity' => array(
-                'days' => intval($row['bundle_validity_days']),
-                'hours' => intval($row['bundle_validity_hours'])
+                'days' => 0, // Calculated from dates if needed
+                'hours' => 0
             ),
             'remaining' => $remaining
         );
@@ -154,15 +164,18 @@ try {
                         COUNT(*) as count,
                         SUM(bp.planCost) as revenue
                     FROM user_bundles ub
-                    INNER JOIN billing_plans bp ON ub.plan_id = bp.id
-                    LEFT JOIN userinfo ui ON ub.username = ui.username
+                    INNER JOIN {$configValues['CONFIG_DB_TBL_DALOBILLINGPLANS']} bp ON ub.plan_id = bp.id
+                    LEFT JOIN {$configValues['CONFIG_DB_TBL_DALOUSERINFO']} ui ON ub.username = ui.username
                     LEFT JOIN user_agent ua ON ui.id = ua.user_id
                     WHERE $where_sql
                     GROUP BY bp.planName
                     ORDER BY count DESC";
     
     $stmt = $db->prepare($by_plan_sql);
-    $stmt->bind_param(...$params);
+    if (!$stmt) {
+        throw new Exception('Prepare failed: ' . $db->error);
+    }
+    call_user_func_array(array($stmt, 'bind_param'), $params);
     $stmt->execute();
     $result = $stmt->get_result();
     
@@ -195,17 +208,12 @@ try {
         'purchases' => $purchases
     );
     
-    apiLogRequest(array(
-        'start_date' => $start_date,
-        'end_date' => $end_date,
-        'agent_id' => $agent_id,
-        'total_results' => count($purchases)
-    ));
+    // Request logging is handled by auth.php
     
-    apiSendSuccess('Bundle purchase report generated', $response);
+    apiSendSuccess(array_merge(['message' => 'Bundle purchase report generated'], $response));
     
 } catch (Exception $e) {
-    apiLogError($e->getMessage());
+    logApiError(basename($_SERVER['PHP_SELF']), $e->getMessage());
     apiSendError('Report generation failed: ' . $e->getMessage());
 }
 ?>

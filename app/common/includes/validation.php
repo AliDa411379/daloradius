@@ -276,6 +276,7 @@ $valid_planTypes = array(  "unlimited", "traffic","time", "hybrid" );
 $valid_planRecurringPeriods = array( "Daily", "Weekly", "Monthly", "Quarterly", "Semi-Yearly", "Yearly", );
 $valid_planRecurringBillingSchedules = array( "Fixed", "Anniversary", );
 $valid_planCurrencys = [
+                        "SYP", // Syrian Pound
                         "USD", // United States Dollar
                         "EUR", // Euro
                         "JPY", // Japanese Yen

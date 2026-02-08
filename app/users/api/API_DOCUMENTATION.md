@@ -52,8 +52,8 @@ All APIs return errors in this format:
 
 ## 1. Agent Balance Topup
 
-**File**: `agent_topup_balance.php`  
-**Methods**: POST  
+**File**: `agent_topup_balance.php`
+**Methods**: POST
 **Description**: Add balance to user account via agent
 
 **Request**:
@@ -63,24 +63,60 @@ All APIs return errors in this format:
   "username": "testuser",
   "amount": 100.50,
   "payment_method": "cash",
-  "notes": "Balance topup via agent shop"
+  "notes": "Balance topup via agent shop",
+  "auto_activate": false
 }
 ```
 
-**Response**:
+**Parameters**:
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| agent_id | int | Yes | - | Agent ID performing the topup |
+| username | string | Yes | - | Username to topup |
+| amount | float | Yes | - | Amount to add (max: 300,000) |
+| payment_method | string | No | "cash" | Payment method (cash, bank, mobile) |
+| notes | string | No | "Balance topup via agent" | Transaction notes |
+| auto_activate | bool | No | **false** | If true, auto-purchase bundle if balance sufficient |
+
+**Response (auto_activate=false, default)**:
 ```json
 {
   "success": true,
   "payment_id": 123,
   "username": "testuser",
-  "amount": 100.50,
+  "amount_added": 100.50,
   "balance_before": 50.00,
-  "new_balance": 150.50,
+  "balance_after_topup": 150.50,
+  "final_balance": 150.50,
   "agent_name": "Agent Shop A",
   "payment_date": "2025-11-24 12:30:00",
-  "message": "Balance topup successful"
+  "message": "Balance topup successful",
+  "auto_activate": false,
+  "note": "Bundle not auto-activated. Use auto_activate=true to enable automatic bundle purchase."
 }
 ```
+
+**Response (auto_activate=true, bundle purchased)**:
+```json
+{
+  "success": true,
+  "payment_id": 123,
+  "username": "testuser",
+  "amount_added": 100.50,
+  "balance_before": 50.00,
+  "balance_after_topup": 150.50,
+  "final_balance": 100.50,
+  "agent_name": "Agent Shop A",
+  "payment_date": "2025-11-24 12:30:00",
+  "message": "Balance topup successful",
+  "auto_activate": true,
+  "bundle_activated": true,
+  "bundle_cost_deducted": 50.00,
+  "reactivation_details": { ... }
+}
+```
+
+**Important**: By default `auto_activate=false` to prevent unexpected balance deductions. Set to `true` only when you want to automatically purchase the user's bundle plan after topup.
 
 ---
 
@@ -157,6 +193,10 @@ GET /app/users/api/agent_get_active_users.php?agent_id=1&status=active&limit=50&
       "balance": 25.50,
       "status": "active",
       "creation_date": "2025-10-15",
+      "is_online": true,
+      "online_time_str": "02:15:30",
+      "online_traffic_mb": 150.5,
+      "connected_since": "2025-12-04 10:00:00",
       "last_payment": "2025-11-20",
       "last_payment_amount": 30.00
     },
@@ -169,7 +209,11 @@ GET /app/users/api/agent_get_active_users.php?agent_id=1&status=active&limit=50&
       "active_bundle": "50GB Bundle",
       "bundle_expiry": "2025-12-10",
       "status": "active",
-      "creation_date": "2025-11-01"
+      "creation_date": "2025-11-01",
+      "is_online": false,
+      "online_time_str": "00:00:00",
+      "online_traffic_mb": 0,
+      "connected_since": null
     }
   ]
 }

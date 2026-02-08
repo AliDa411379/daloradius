@@ -80,11 +80,16 @@
     $planGroup = (array_key_exists('planGroup', $_POST) && !empty(trim($_POST['planGroup']))) ? trim($_POST['planGroup']) : "";
     $groups = (array_key_exists('groups', $_POST) && isset($_POST['groups'])) ? $_POST['groups'] : array();
     
-    $is_bundle = (array_key_exists('is_bundle', $_POST) && !empty(trim($_POST['is_bundle'])) &&
-                  in_array(strtolower(trim($_POST['is_bundle'])), array("1", "0")))
-               ? intval(trim($_POST['is_bundle'])) : 0;
-    $bundle_validity_days = (array_key_exists('bundle_validity_days', $_POST) && !empty(trim($_POST['bundle_validity_days']))) ? intval(trim($_POST['bundle_validity_days'])) : 0;
-    $bundle_validity_hours = (array_key_exists('bundle_validity_hours', $_POST) && !empty(trim($_POST['bundle_validity_hours']))) ? intval(trim($_POST['bundle_validity_hours'])) : 0;
+    $is_bundle = 0;
+    if (array_key_exists('is_bundle', $_POST)) {
+        $temp_bundle = trim($_POST['is_bundle']);
+        if ($temp_bundle === '1') {
+            $is_bundle = 1;
+        }
+    }
+    
+    $bundle_validity_days = (array_key_exists('bundle_validity_days', $_POST)) ? intval(trim($_POST['bundle_validity_days'])) : 0;
+    $bundle_validity_hours = (array_key_exists('bundle_validity_hours', $_POST)) ? intval(trim($_POST['bundle_validity_hours'])) : 0;
 
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -293,6 +298,7 @@
                                         "name" => "is_bundle",
                                         "selected_value" => (string)$is_bundle,
                                         "tooltipText" => "Mark this as a prepaid bundle (will appear in bundle purchase)",
+                                        "integer_value" => true,
                                      );
         
         $input_descriptors0[] = array(

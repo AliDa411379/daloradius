@@ -12,16 +12,19 @@
 header('Content-Type: application/json');
 
 // Include required files
-require_once('../../common/includes/config_read.php');
-require_once('../../common/includes/db_open.php');
+// Include required files
+require_once(__DIR__ . '/../../common/includes/config_read.php');
+require_once(__DIR__ . '/../../common/includes/db_open.php');
 
-function apiSendError($message, $code = 400) {
+function apiSendError($message, $code = 400)
+{
     http_response_code($code);
     echo json_encode(['success' => false, 'error' => $message]);
     exit;
 }
 
-function apiSendSuccess($data) {
+function apiSendSuccess($data)
+{
     echo json_encode(array_merge(['success' => true], $data));
     exit;
 }
@@ -47,13 +50,13 @@ try {
         $configValues['CONFIG_DB_PASS'],
         $configValues['CONFIG_DB_NAME']
     );
-    
+
     if ($mysqli->connect_error) {
         apiSendError('Database connection failed', 500);
     }
-    
+
     $username_esc = $mysqli->real_escape_string($username);
-    
+
     // Get user info
     $sql = "SELECT 
                 u.id,
@@ -70,15 +73,15 @@ try {
             LEFT JOIN subscription_types st ON u.subscription_type_id = st.id
             WHERE u.username = '$username_esc'
             LIMIT 1";
-    
+
     $result = $mysqli->query($sql);
-    
+
     if (!$result || $result->num_rows === 0) {
         apiSendError('User not found', 404);
     }
-    
+
     $user = $result->fetch_assoc();
-    
+
     // Get active bundle if exists
     $activeBundle = null;
     if ($user['subscription_type_id'] == 2) { // Prepaid
@@ -91,7 +94,7 @@ try {
              ORDER BY expiry_date DESC LIMIT 1",
             $user['id']
         );
-        
+
         $result = $mysqli->query($sql);
         if ($result && $result->num_rows > 0) {
             $bundle = $result->fetch_assoc();
@@ -106,31 +109,46 @@ try {
             ];
         }
     }
-    
+
+    // Check for explicit blocks/bans
+    $group_check = $mysqli->query("SELECT count(*) as cnt FROM radusergroup WHERE username = '$username_esc' AND groupname IN ('daloRADIUS-Disabled-Users', 'block_user')");
+    $is_banned = ($group_check && $group_check->fetch_assoc()['cnt'] > 0);
+
+    // Determine effective status
+    $effective_status = $user['billstatus'];
+
+    if ($is_banned) {
+        $effective_status = 'suspended';
+    } elseif ($user['subscription_type_id'] == 2 && !$activeBundle) {
+        // Prepaid user with no active bundle (or expired)
+        $effective_status = 'expired';
+    }
+
     $mysqli->close();
-    
+
     // Build response
     $response = [
         'username' => $user['username'],
         'subscription_type' => $user['subscription_type'],
         'subscription_type_display' => $user['subscription_type_display'],
         'plan_name' => $user['planName'],
-        'status' => $user['billstatus'],
+        'status' => $effective_status,
         'balances' => [
             'money' => floatval($user['money_balance']),
             'traffic_mb' => floatval($user['traffic_balance']),
             'time_minutes' => floatval($user['timebank_balance'])
         ]
     ];
-    
+
     if ($activeBundle) {
         $response['active_bundle'] = $activeBundle;
     }
-    
+
     apiSendSuccess($response);
-    
+
 } catch (Exception $e) {
-    if (isset($mysqli)) $mysqli->close();
+    if (isset($mysqli))
+        $mysqli->close();
     apiSendError('Internal server error: ' . $e->getMessage(), 500);
 }
 

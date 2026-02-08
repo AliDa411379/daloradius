@@ -66,6 +66,8 @@ define('API_PROTECTED_ENDPOINTS', [
     'agent_get_active_users.php',
     'agent_payment_history.php',
     'payment_refund.php',
+    'report_bundle_purchases.php',
+    'report_payments.php',
 ]);
 
 // Endpoints accessible without authentication (for testing)
@@ -171,7 +173,7 @@ function logApiRequest($endpoint, $method, $ip, $apiKey = null) {
         $apiKey ? substr($apiKey, 0, 8) . '...' : 'None'
     );
     
-    file_put_contents(API_LOG_FILE, $logEntry, FILE_APPEND);
+    @file_put_contents(API_LOG_FILE, $logEntry, FILE_APPEND);
 }
 
 /**
@@ -191,5 +193,5 @@ function logApiError($endpoint, $error, $details = '') {
         $details ? "($details)" : ''
     );
     
-    file_put_contents(API_ERROR_LOG_FILE, $logEntry, FILE_APPEND);
+    @file_put_contents(API_ERROR_LOG_FILE, $logEntry, FILE_APPEND);
 }

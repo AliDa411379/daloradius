@@ -51,38 +51,16 @@ try {
     $mysqli->set_charset("utf8mb4");
     
     // Build query
-    $sql = "SELECT 
-                bp.id,
-                bp.planName,
-                bp.planType,
-                bp.planCost,
-                bp.planCurrency,
-                bp.is_bundle,
-                bp.bundle_validity_days,
-                bp.bundle_validity_hours,
-                bp.auto_renew,
-                bp.planTrafficTotal,
-                bp.planTrafficUpload,
-                bp.planTrafficDownload,
-                bp.planTimeBank,
-                bp.planTimeRefillCost,
-                bp.planTrafficRefillCost,
-                bp.planRecurring,
-                bp.planRecurringPeriod,
-                bp.planActive,
-                st.id as subscription_type_id,
-                st.name as subscription_type_name,
-                st.description as subscription_type_description
+    $sql = "SELECT bp.*
             FROM " . $configValues['CONFIG_DB_TBL_DALOBILLINGPLANS'] . " bp
-            LEFT JOIN subscription_types st ON bp.subscription_type_id = st.id
-            WHERE bp.planActive = 1";
+            WHERE bp.planActive = 'yes'";
     
     // Filter by subscription type
     if ($subscription_type !== 'all') {
         if ($subscription_type === 'monthly') {
-            $sql .= " AND st.name = 'monthly'";
+            $sql .= " AND bp.subscription_type_id = 1";
         } elseif ($subscription_type === 'prepaid') {
-            $sql .= " AND st.name = 'prepaid'";
+            $sql .= " AND bp.subscription_type_id = 2";
         }
     }
     
@@ -102,48 +80,57 @@ try {
     $plans = [];
     
     while ($row = $result->fetch_assoc()) {
+        // Map subscription_type_id to name
+        $subscription_type_name = 'monthly';
+        if (isset($row['subscription_type_id'])) {
+            $subscription_type_name = ($row['subscription_type_id'] == 2) ? 'prepaid' : 'monthly';
+        }
+        
         $plan = [
             'plan_id' => (int)$row['id'],
             'plan_name' => $row['planName'],
             'plan_type' => $row['planType'],
             'cost' => (float)$row['planCost'],
-            'currency' => $row['planCurrency'] ?? 'USD',
-            'is_bundle' => (bool)$row['is_bundle'],
-            'subscription_type' => $row['subscription_type_name'] ?? 'monthly',
+            'currency' => $row['planCurrency'] ?? 'SYP',
+            'is_bundle' => isset($row['is_bundle']) ? (bool)$row['is_bundle'] : false,
+            'subscription_type' => $subscription_type_name,
         ];
         
         // Bundle-specific details
-        if ($row['is_bundle']) {
+        if ($plan['is_bundle']) {
+            $validityDays = isset($row['bundle_validity_days']) ? (int)$row['bundle_validity_days'] : 30;
+            $validityHours = isset($row['bundle_validity_hours']) ? (int)$row['bundle_validity_hours'] : 0;
+            
             $plan['bundle_details'] = [
-                'validity_days' => (int)$row['bundle_validity_days'],
-                'validity_hours' => (int)$row['bundle_validity_hours'],
-                'auto_renew' => (bool)$row['auto_renew']
+                'validity_days' => $validityDays,
+                'validity_hours' => $validityHours,
+                'auto_renew' => isset($row['auto_renew']) ? (bool)$row['auto_renew'] : false
             ];
             
             // Calculate total validity in hours for display
-            $totalHours = ((int)$row['bundle_validity_days'] * 24) + (int)$row['bundle_validity_hours'];
+            $totalHours = ($validityDays * 24) + $validityHours;
             $plan['bundle_details']['total_validity_hours'] = $totalHours;
             
             // Human-readable validity
-            if ($row['bundle_validity_days'] > 0) {
-                $plan['bundle_details']['validity_display'] = $row['bundle_validity_days'] . ' days';
-                if ($row['bundle_validity_hours'] > 0) {
-                    $plan['bundle_details']['validity_display'] .= ' ' . $row['bundle_validity_hours'] . ' hours';
+            if ($validityDays > 0) {
+                $plan['bundle_details']['validity_display'] = $validityDays . ' days';
+                if ($validityHours > 0) {
+                    $plan['bundle_details']['validity_display'] .= ' ' . $validityHours . ' hours';
                 }
             } else {
-                $plan['bundle_details']['validity_display'] = $row['bundle_validity_hours'] . ' hours';
+                $plan['bundle_details']['validity_display'] = $validityHours . ' hours';
             }
         }
         
         // Include detailed plan information if requested
         if ($include_details) {
             $plan['details'] = [
-                'traffic_total_mb' => (float)$row['planTrafficTotal'],
-                'traffic_upload_mb' => (float)$row['planTrafficUpload'],
-                'traffic_download_mb' => (float)$row['planTrafficDownload'],
-                'time_bank_minutes' => (int)$row['planTimeBank'],
-                'recurring' => $row['planRecurring'] === 'Yes',
-                'recurring_period' => $row['planRecurringPeriod']
+                'traffic_total_mb' => isset($row['planTrafficTotal']) ? (float)$row['planTrafficTotal'] : 0,
+                'traffic_upload_mb' => isset($row['planTrafficUp']) ? (float)$row['planTrafficUp'] : 0,
+                'traffic_download_mb' => isset($row['planTrafficDown']) ? (float)$row['planTrafficDown'] : 0,
+                'time_bank_minutes' => isset($row['planTimeBank']) ? (int)$row['planTimeBank'] : 0,
+                'recurring' => isset($row['planRecurring']) && $row['planRecurring'] === 'Yes',
+                'recurring_period' => $row['planRecurringPeriod'] ?? ''
             ];
             
             // Get profile/group assignments for this plan

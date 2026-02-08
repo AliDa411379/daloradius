@@ -19,6 +19,7 @@
 require_once(__DIR__ . '/config.php');
 require_once(__DIR__ . '/auth.php');
 require_once(__DIR__ . '/../../common/library/BalanceManager.php');
+require_once(__DIR__ . '/../../common/library/balance_functions.php');
 
 // Handle preflight
 apiHandlePreflight();
@@ -164,6 +165,11 @@ try {
                 $user_result['old_balance'] = $old_balance;
                 $user_result['new_balance'] = $old_balance + $amount;
                 $user_result['message'] = 'Balance added successfully';
+                
+                // Handle reactivation
+                $reactivation = handle_user_reactivation($db, $username, $agent_id);
+                $user_result['reactivation'] = $reactivation;
+                
                 $results['successful']++;
                 $results['total_amount'] += $amount;
             } else {

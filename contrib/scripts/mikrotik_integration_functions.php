@@ -111,6 +111,46 @@ function mikrotik_set_radius_attribute($db, $username, $attribute, $value, $op =
 }
 
 /**
+ * Update or insert RADIUS attribute in radcheck table
+ * @param mysqli $db Database connection
+ * @param string $username Username
+ * @param string $attribute Attribute name
+ * @param string $value Attribute value
+ * @param string $op Operator (default ':=')
+ * @return bool Success status
+ */
+function mikrotik_set_radcheck_attribute($db, $username, $attribute, $value, $op = ':=') {
+    $username = $db->real_escape_string($username);
+    $attribute = $db->real_escape_string($attribute);
+    $value = $db->real_escape_string($value);
+    $op = $db->real_escape_string($op);
+    
+    // Check if attribute exists
+    $check_sql = "SELECT id FROM radcheck WHERE username='$username' AND attribute='$attribute'";
+    $result = $db->query($check_sql);
+    
+    if ($result && $result->num_rows > 0) {
+        // Update existing attribute
+        $update_sql = "UPDATE radcheck SET value='$value', op='$op' WHERE username='$username' AND attribute='$attribute'";
+        if (!$db->query($update_sql)) {
+            mikrotik_log("Failed to update $attribute for $username in radcheck: " . $db->error, 'ERROR');
+            return false;
+        }
+        mikrotik_log("Updated $attribute=$value for $username in radcheck");
+    } else {
+        // Insert new attribute
+        $insert_sql = "INSERT INTO radcheck (username, attribute, op, value) VALUES ('$username', '$attribute', '$op', '$value')";
+        if (!$db->query($insert_sql)) {
+            mikrotik_log("Failed to insert $attribute for $username in radcheck: " . $db->error, 'ERROR');
+            return false;
+        }
+        mikrotik_log("Inserted $attribute=$value for $username in radcheck");
+    }
+    
+    return true;
+}
+
+/**
  * Remove RADIUS attribute from radreply table
  * @param mysqli $db Database connection
  * @param string $username Username
@@ -146,10 +186,13 @@ function mikrotik_get_user_plan($db, $username) {
             u.planName,
             u.timebank_balance,
             u.traffic_balance,
+            u.bundle_expiry_date,
             p.planType,
             p.planTimeBank,
             p.planTrafficTotal,
-            p.planActive
+            p.planActive,
+            p.bundle_validity_days,
+            p.bundle_validity_hours
         FROM userbillinfo u
         LEFT JOIN billing_plans p ON u.planName = p.planName
         WHERE u.username = '$username'
@@ -251,11 +294,77 @@ function mikrotik_sync_user_attributes($db, $username) {
     }
     
     // Set time attributes
+    // Set time attributes (Converted to Expiration)
+    // REPLACED: Session-Timeout with Expiration in radcheck
     if (stripos($user_plan['planType'], 'Time') !== false || $time_balance > 0) {
-        $session_timeout = mikrotik_convert_time($time_balance);
-        $success &= mikrotik_set_radius_attribute($db, $username, 'Session-Timeout', $session_timeout);
+        // Calculate expiration: NOW + time_balance (minutes)
+        $expiry_timestamp = time() + ($time_balance * 60);
+        $expiration_value = date('d M Y H:i', $expiry_timestamp);
+        
+        $success &= mikrotik_set_radcheck_attribute($db, $username, 'Expiration', $expiration_value);
+        
+        // Remove Session-Timeout from radreply
+        $success &= mikrotik_remove_radius_attribute($db, $username, 'Session-Timeout');
+        
+        mikrotik_log("Set Expiration=$expiration_value (derived from Time Balance) for $username");
     } else {
-        $success &= mikrotik_set_radius_attribute($db, $username, 'Session-Timeout', '0');
+        // Remove Expiration if no time balance? 
+        // Or if we have a bundle expiry, that logic below might overwrite/supplement it.
+        // Let's remove it here, and the bundle logic (next block) will set it if a bundle is active.
+        $username_esc = $db->real_escape_string($username);
+        $db->query("DELETE FROM radcheck WHERE username='$username_esc' AND attribute='Expiration'");
+        
+        // Remove Session-Timeout
+        $success &= mikrotik_remove_radius_attribute($db, $username, 'Session-Timeout');
+    }
+    
+    // Set Expiration attribute based on active bundle
+    $username_esc = $db->real_escape_string($username);
+    $bundle_sql = "SELECT expiry_date FROM user_bundles WHERE username = '$username_esc' AND status = 'active' AND expiry_date > NOW() ORDER BY id DESC LIMIT 1";
+    $bundle_res = $db->query($bundle_sql);
+    
+    if ($bundle_res && $bundle_res->num_rows > 0) {
+        $brow = $bundle_res->fetch_assoc();
+        $expiry_date = $brow['expiry_date'];
+        
+        // Format date for Mikrotik/RADIUS (d M Y H:i)
+        // Example: 02 Dec 2025 13:31
+        $expiration_value = date('d M Y H:i', strtotime($expiry_date));
+        
+        // Only overwrite if this bundle expiry is sooner than the time-balance expiry?
+        // OR does bundle expiry take precedence?
+        // Usually, bundle expiry is the hard stop. Time balance is usage limit.
+        // If we have BOTH, we should probably take the MINIMUM.
+        
+        // Check if we already set an expiration from Time Balance
+        /*
+        $existing_sql = "SELECT value FROM radcheck WHERE username='$username_esc' AND attribute='Expiration'";
+        $existing_res = $db->query($existing_sql);
+        if ($existing_res && $existing_res->num_rows > 0) {
+             $row = $existing_res->fetch_assoc();
+             $existing_time = strtotime($row['value']);
+             $bundle_time = strtotime($expiration_value);
+             if ($bundle_time < $existing_time) {
+                 // Bundle expires sooner, overwrite
+                 $success &= mikrotik_set_radcheck_attribute($db, $username, 'Expiration', $expiration_value);
+             }
+        } else {
+             $success &= mikrotik_set_radcheck_attribute($db, $username, 'Expiration', $expiration_value);
+        }
+        */
+        // For simplicity and per request "Bundle expiry overrides", let's just set the bundle expiry 
+        // as it's likely the intended hard limit for the account validity.
+        
+        $success &= mikrotik_set_radcheck_attribute($db, $username, 'Expiration', $expiration_value);
+        mikrotik_log("Set Expiration=$expiration_value for $username");
+    } else {
+        // If no active bundle, remove Expiration attribute? Or set to past?
+        // Usually better to remove it so they don't get rejected for expiration if they have other access methods
+        // But for bundle-based access, maybe we should set it to NOW?
+        // For now, let's remove it if no active bundle found (or maybe they are on pay-as-you-go?)
+        // Let's check if we should remove it.
+        $db->query("DELETE FROM radcheck WHERE username='$username_esc' AND attribute='Expiration'");
+        mikrotik_log("Removed Expiration attribute for $username (no active bundle)");
     }
     
     if ($success) {

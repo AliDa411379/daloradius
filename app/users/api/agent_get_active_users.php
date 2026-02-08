@@ -76,7 +76,10 @@ try {
         $typeId = ($subscriptionType === 'monthly') ? 1 : 2;
         $whereConditions[] = "u.subscription_type_id = $typeId";
     }
-    
+
+    // Always filter for online users only (users with active radacct sessions)
+    $whereConditions[] = "u.username IN (SELECT DISTINCT username FROM radacct WHERE acctstoptime IS NULL OR acctstoptime = '0000-00-00 00:00:00')";
+
     $whereClause = implode(' AND ', $whereConditions);
     
     // Get total count

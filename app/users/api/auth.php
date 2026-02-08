@@ -110,7 +110,7 @@ if (API_RATE_LIMIT_ENABLED) {
     $rateLimitDir = dirname($rateLimitFile);
     
     if (!is_dir($rateLimitDir)) {
-        mkdir($rateLimitDir, 0755, true);
+        @mkdir($rateLimitDir, 0755, true);
     }
     
     $currentMinute = floor(time() / 60);
@@ -135,7 +135,7 @@ if (API_RATE_LIMIT_ENABLED) {
     }
     
     $requests[] = time();
-    file_put_contents($rateLimitFile, json_encode([
+    @file_put_contents($rateLimitFile, json_encode([
         'minute' => $currentMinute,
         'requests' => $requests
     ]));

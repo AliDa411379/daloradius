@@ -16,6 +16,7 @@ require_once('auth.php');
 require_once('../../common/includes/config_read.php');
 require_once('../../common/includes/db_open.php');
 require_once('../../common/library/BalanceManager.php');
+require_once('../../common/library/balance_functions.php');
 
 // Only allow POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -43,6 +44,11 @@ $amount = floatval($input['amount']);
 $paymentMethod = isset($input['payment_method']) ? trim($input['payment_method']) : 'cash';
 $notes = isset($input['notes']) ? trim($input['notes']) : 'Balance topup via agent';
 
+// Auto-activate bundle after topup (default: false to prevent unexpected charges)
+// When true: if user has sufficient balance after topup, automatically purchase/activate their bundle
+// When false: only add balance, user must manually purchase bundle or use separate API
+$autoActivate = isset($input['auto_activate']) ? filter_var($input['auto_activate'], FILTER_VALIDATE_BOOLEAN) : false;
+
 // Validate amount
 if ($amount <= 0) {
     apiSendError('Amount must be greater than zero');
@@ -54,12 +60,13 @@ if ($amount > 300000) {
 
 try {
     // Verify agent exists
-    $sql = sprintf("SELECT id, name FROM %s WHERE id = %d AND is_deleted = 0", 
+    $sql = sprintf("SELECT id, name FROM %s WHERE id = %d AND is_deleted = 0",
                    $configValues['CONFIG_DB_TBL_DALOAGENTS'], $agentId);
+
     $result = $dbSocket->query($sql);
     
     if (DB::isError($result) || $result->numRows() === 0) {
-        apiSendError('Agent not found');
+        apiSendError('Agent not found or inactive');
     }
     
     $agent = $result->fetchRow(DB_FETCHMODE_ASSOC);
@@ -90,6 +97,8 @@ try {
     if ($mysqli->connect_error) {
         apiSendError('Database connection failed', 500);
     }
+    
+    $mysqli->report_mode = MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT;
     
     $balanceManager = new BalanceManager($mysqli);
     
@@ -148,21 +157,63 @@ try {
         $userId
     ));
     
+    // Handle user reactivation/bundle activation ONLY if requested
+    // This prevents unexpected balance deductions
+    $reactivation_result = null;
+    $finalBalance = $balanceAfter;
+    $bundleActivated = false;
+
+    if ($autoActivate) {
+        $reactivation_result = handle_user_reactivation($mysqli, $username, $agentId);
+
+        // Re-read the actual final balance after reactivation (may have deducted plan cost)
+        $balanceCheck = $mysqli->query(sprintf(
+            "SELECT money_balance FROM userbillinfo WHERE id = %d",
+            $userId
+        ));
+        if ($balanceCheck && $balanceCheck->num_rows > 0) {
+            $finalBalance = floatval($balanceCheck->fetch_assoc()['money_balance']);
+        }
+
+        // Check if bundle was activated (balance changed after reactivation)
+        $bundleActivated = ($finalBalance < $balanceAfter);
+    }
+
     $mysqli->close();
-    
-    // Success response
-    apiSendSuccess([
+
+    // Build response
+    $response = [
         'payment_id' => $paymentId,
         'username' => $username,
-        'amount' => $amount,
+        'amount_added' => $amount,
         'balance_before' => $balanceBefore,
-        'new_balance' => $balanceAfter,
+        'balance_after_topup' => $balanceAfter,
+        'final_balance' => $finalBalance,
         'agent_name' => $agent['name'],
         'payment_date' => date('Y-m-d H:i:s'),
         'message' => 'Balance topup successful'
-    ]);
+    ];
+
+    // Add auto-activation info if it was requested
+    if ($autoActivate) {
+        $response['auto_activate'] = true;
+        $response['bundle_activated'] = $bundleActivated;
+        if ($bundleActivated) {
+            $response['bundle_cost_deducted'] = $balanceAfter - $finalBalance;
+        }
+        if ($reactivation_result) {
+            $response['reactivation_details'] = $reactivation_result;
+        }
+    } else {
+        $response['auto_activate'] = false;
+        $response['note'] = 'Bundle not auto-activated. Use auto_activate=true to enable automatic bundle purchase.';
+    }
+
+    apiSendSuccess($response);
     
 } catch (Exception $e) {
-    apiSendError('Internal server error: ' . $e->getMessage(), 500);
+    // Log full error details server-side, but don't expose to client
+    error_log("agent_topup_balance error: " . $e->getMessage() . " | File: " . $e->getFile() . " | Line: " . $e->getLine());
+    apiSendError('Internal server error. Please try again or contact support.', 500);
 }
 
