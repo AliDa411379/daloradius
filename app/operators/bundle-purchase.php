@@ -253,6 +253,14 @@ ini_set('display_errors', 1);
                             $bundle_info['name'],
                             $bundle_cost
                         );
+
+                        // Log bundle purchase
+                        try {
+                            require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                            $actionLogger = new ActionLogger($mysqli);
+                            $actionLogger->log('bundle_purchase', 'bundle', $username,
+                                "Purchased bundle '{$bundle_info['name']}' for '$username' (Cost: $bundle_cost)");
+                        } catch (Exception $e) { /* logging should not break purchase */ }
                     } else {
                         throw new Exception($result['message']);
                     }

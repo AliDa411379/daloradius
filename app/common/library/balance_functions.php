@@ -784,7 +784,8 @@ function handle_user_reactivation($db, $username, $agent_id = null)
             $log[] = "Found existing active bundle ID: $bundle_id";
         } else {
             // Check for expired/inactive bundle that can be reactivated
-            $expired_bundle_sql = "SELECT id FROM user_bundles WHERE username = '$username_esc' AND status != 'active' ORDER BY id DESC LIMIT 1";
+            // Also catch bundles still marked 'active' but with expired date (evt_expire_bundles may not have run yet)
+            $expired_bundle_sql = "SELECT id FROM user_bundles WHERE username = '$username_esc' AND (status != 'active' OR (status = 'active' AND expiry_date <= NOW())) ORDER BY id DESC LIMIT 1";
             $expired_result = $db->query($expired_bundle_sql);
 
             // Get current balance and plan cost
@@ -986,6 +987,37 @@ function handle_user_reactivation($db, $username, $agent_id = null)
             $delete_limit_sql = "DELETE FROM radreply WHERE username = '$username_esc' AND attribute = 'Mikrotik-Total-Limit'";
             $db->query($delete_limit_sql);
             $log[] = "Removed Mikrotik-Total-Limit (Unlimited)";
+        }
+
+        // Update Expiration in radcheck based on bundle expiry
+        // Calculate expiry from plan validity if not already set from bundle creation above
+        if (empty($expiry_date)) {
+            $exp_calc_date = date('Y-m-d H:i:s', strtotime("+{$validityDays} days +{$validityHours} hours"));
+        } else {
+            $exp_calc_date = $expiry_date;
+        }
+        $expiration_value = date('d M Y H:i:s', strtotime($exp_calc_date));
+
+        // Check current Expiration — update if missing or expired
+        $exp_check = $db->query("SELECT id, value FROM radcheck WHERE username = '$username_esc' AND attribute = 'Expiration' LIMIT 1");
+        $needs_update = true;
+        if ($exp_check && $exp_check->num_rows > 0) {
+            $exp_row = $exp_check->fetch_assoc();
+            $current_exp_time = strtotime($exp_row['value']);
+            if ($current_exp_time && $current_exp_time > time()) {
+                $needs_update = false; // Expiration is still in the future, leave it
+                $log[] = "Expiration still valid (" . $exp_row['value'] . ") - not changed";
+            }
+        }
+
+        if ($needs_update) {
+            $db->query("DELETE FROM radcheck WHERE username = '$username_esc' AND attribute = 'Expiration'");
+            $exp_esc = $db->real_escape_string($expiration_value);
+            if ($db->query("INSERT INTO radcheck (username, attribute, op, value) VALUES ('$username_esc', 'Expiration', ':=', '$exp_esc')")) {
+                $log[] = "Set Expiration to $expiration_value";
+            } else {
+                $log[] = "Failed to set Expiration: " . $db->error;
+            }
         }
 
         // Sync Mikrotik attributes if function exists

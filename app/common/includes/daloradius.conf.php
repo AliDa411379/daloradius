@@ -27,7 +27,7 @@ if (strpos($_SERVER['PHP_SELF'], '/common/includes/daloradius.conf.php') !== fal
     http_response_code(404);
     exit;
 }
-
+//hii
 $configValues['FREERADIUS_VERSION'] = '3';
 $configValues['CONFIG_DB_ENGINE'] = 'mysqli';
 $configValues['CONFIG_DB_HOST'] = '172.30.16.200';

@@ -156,6 +156,24 @@
                         $successMsg = sprintf($format . ' [<a href="bill-plans-edit.php?planName=%s" title="Edit">Edit</a>]', t('all','PlanName'),
                                               $planName_enc, $groupsCount, t('title','Profiles'), t('all','PlanName'), urlencode($planName_enc));
                         $logAction .= sprintf("$format on page: ", t('all','PlanName'), $planName, $groupsCount, t('title','Profiles'), t('all','PlanName'));
+
+                        // Log plan creation
+                        try {
+                            $mysqli = new mysqli($configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                                $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME']);
+                            if (!$mysqli->connect_error) {
+                                require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                                $actionLogger = new ActionLogger($mysqli);
+                                $actionLogger->log('plan_create', 'plan', $planName,
+                                    "Created plan '$planName' (Cost: $planCost, Type: $planType, Bundle: " . ($is_bundle ? 'Yes' : 'No') . ")",
+                                    null,
+                                    ['planCost' => $planCost, 'planType' => $planType, 'is_bundle' => $is_bundle,
+                                     'planBandwidthUp' => $planBandwidthUp, 'planBandwidthDown' => $planBandwidthDown,
+                                     'bundle_validity_days' => $bundle_validity_days]
+                                );
+                                $mysqli->close();
+                            }
+                        } catch (Exception $e) { /* logging should not break the page */ }
                     } else {
                         $failureMsg = "Failed to insert a new plan to database";
                         $logAction .= "$failureMsg on page: ";
@@ -236,7 +254,7 @@
                                         "type" => "select",
                                         "options" => array( "yes", "no" ),
                                         "caption" => t('all','PlanActive'),
-                                        "name" => "planRecurring",
+                                        "name" => "planActive",
                                         "selected_value" => $planActive,
                                      );
 

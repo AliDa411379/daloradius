@@ -1,0 +1,35 @@
+# Server-specific config (each VPS has its own)
+app/common/includes/daloradius.conf.php
+
+# Docker volumes
+data/
+
+# Logs
+var/log/
+var/logs/
+*.log
+
+# Root-level SQL dumps (not the schema files in contrib/db/)
+/*.sql
+
+# Environment files
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Deploy keys (NEVER commit these)
+deploy_key*
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Temp/debug files
+*.bak
+*.tmp

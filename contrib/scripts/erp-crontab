@@ -1,45 +1,47 @@
 # DaloRADIUS - Cron Job Configuration
-# ERP Integration - Dual Subscription Model
+# ERP Integration - Subscription Lifecycle
+#
+# IMPORTANT: Most billing operations are now handled by MySQL Events.
+# See: contrib/db/erp_integration/08_subscription_lifecycle_events.sql
+#
+# MySQL Events handle:
+#   - Outdoor/ADSL monthly billing (daily at 01:00)
+#   - Bundle expiry + blocking (every 15 minutes)
+#   - Outdoor user reactivation fallback (every 30 minutes)
+#   - Instant reactivation on balance topup (trigger, real-time)
+#   - Cleanup of old disconnect queue records (daily at 03:00)
+#
+# The ONLY cron job needed is the CoA Disconnect processor below.
 
 # ========================================
-# MONTHLY BILLING (26th of every month)
+# CoA DISCONNECT PROCESSOR (Every 5 minutes)
 # ========================================
-# Generate monthly invoices at midnight on the 26th
-0 0 26 * * /usr/bin/php /var/www/daloradius/contrib/scripts/generate_monthly_bills.php >> /var/log/daloradius/monthly_billing.log 2>&1
+# Reads pending_disconnects table (populated by MySQL events when users are blocked)
+# and sends RADIUS Disconnect-Request to kick active sessions off the NAS.
+# This is the only operation that requires PHP (radclient can't run from MySQL).
+*/5 * * * * /usr/bin/php /var/www/daloradius/contrib/scripts/check_bundle_expiry.php >> /var/log/daloradius/coa_disconnect.log 2>&1
 
 # ========================================
-# BUNDLE EXPIRY CHECK (Hourly)
+# OPTIONAL: MikroTik Attribute Sync (every 30 minutes)
 # ========================================
-# Check and expire bundles every hour
-0 * * * * /usr/bin/php /var/www/daloradius/contrib/scripts/check_bundle_expiry.php >> /var/log/daloradius/bundle_expiry.log 2>&1
+# Only needed if you use MikroTik-specific attribute synchronization
+# */30 * * * * /usr/bin/php /var/www/daloradius/contrib/scripts/mikrotik_attributes_sync_v2.php >> /var/log/daloradius/mikrotik_sync.log 2>&1
 
 # ========================================
-# OVERDUE INVOICE SUSPENSION (Daily at 1 AM)
+# Prerequisites:
 # ========================================
-# Suspend users with overdue invoices past grace period
-0 1 * * * /usr/bin/php /var/www/daloradius/contrib/scripts/suspend_unpaid_users.php >> /var/log/daloradius/suspension.log 2>&1
-
-# ========================================
-# USER REACTIVATION (Every 2 hours)
-# ========================================
-# Reactivate users who have paid their invoices
-0 */2 * * * /usr/bin/php /var/www/daloradius/contrib/scripts/reactivate_paid_users.php >> /var/log/daloradius/reactivation.log 2>&1
-
-# ========================================
-# BALANCE MANAGEMENT (Daily at 2 AM)
-# ========================================
-# Update balances from usage (MikroTik integration)
-0 2 * * * /usr/bin/php /var/www/daloradius/contrib/scripts/update_balances_from_usage_v2.php >> /var/log/daloradius/balance_update.log 2>&1
-
-# Sync MikroTik attributes (every 30 minutes)
-*/30 * * * * /usr/bin/php /var/www/daloradius/contrib/scripts/mikrotik_attributes_sync_v2.php >> /var/log/daloradius/mikrotik_sync.log 2>&1
-
-# ========================================
-# Installation Instructions:
-# ========================================
-# 1. Edit paths above to match your installation
-# 2. Update database credentials in each script
-# 3. Create log directory: mkdir -p /var/log/daloradius
-# 4. Install crontab: crontab -e
-# 5. Add the lines above
+# 1. MySQL Event Scheduler must be enabled:
+#    SET GLOBAL event_scheduler = ON;
+#    (or add event_scheduler=ON to my.cnf under [mysqld])
+#
+# 2. Apply the SQL file:
+#    mysql -u root -p radius < contrib/db/erp_integration/08_subscription_lifecycle_events.sql
+#
+# 3. Verify events are running:
+#    SELECT EVENT_NAME, STATUS, LAST_EXECUTED FROM INFORMATION_SCHEMA.EVENTS WHERE EVENT_SCHEMA = 'radius';
+#
+# 4. Create log directory: mkdir -p /var/log/daloradius
+#
+# 5. Install crontab: crontab -e  (add the line above)
+#
 # 6. Verify: crontab -l

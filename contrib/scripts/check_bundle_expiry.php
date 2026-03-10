@@ -1,30 +1,38 @@
 <?php
 /**
- * DaloRADIUS - Bundle Expiry Check Script
- * 
- * Checks for expired bundles and revokes RADIUS access
- * Business Logic: Instant block on expiry (no grace period for bundles)
- * 
- * Schedule: Run hourly
- * Crontab: 0 * * * * /usr/bin/php /path/to/check_bundle_expiry.php
- * 
+ * DaloRADIUS - CoA Disconnect Processor
+ *
+ * Lightweight script that ONLY sends CoA Disconnect-Request packets via radclient.
+ * All billing, blocking, and reactivation logic is handled by MySQL events and triggers.
+ * See: contrib/db/erp_integration/08_subscription_lifecycle_events.sql
+ *
+ * This script reads from the `pending_disconnects` table (populated by MySQL stored
+ * procedures when users are blocked) and sends Disconnect-Request to the NAS for
+ * each user's active sessions.
+ *
+ * Schedule: Run every 5 minutes
+ * Crontab: every 5 min via /usr/bin/php /var/www/daloradius/contrib/scripts/check_bundle_expiry.php
+ *
  * @package DaloRADIUS
- * @version 1.0
+ * @version 3.0
  */
 
-// ================== CONFIGURATION ==================
-define('LOG_FILE', __DIR__ . '/../../var/logs/bundle_expiry.log');
-define('LOCK_FILE', __DIR__ . '/../../var/scripts/bundle_expiry.lock');
+// ================== PATHS ==================
+$baseDir = realpath(__DIR__ . '/../..');
 
-// Database credentials
-define('DB_HOST', '172.30.16.200');
-define('DB_USER', 'bassel');
-define('DB_PASS', 'bassel_password');
-define('DB_NAME', 'radius');
+define('LOG_FILE', $baseDir . '/var/logs/coa_disconnect.log');
+define('LOCK_FILE', $baseDir . '/var/scripts/coa_disconnect.lock');
 
-// ================== INCLUDES ==================
-require_once(__DIR__ . '/../app/common/library/BundleManager.php');
-require_once(__DIR__ . '/../app/common/library/RadiusAccessManager.php');
+// ================== LOAD CONFIG ==================
+$configValues = [];
+$confFile = $baseDir . '/app/common/includes/daloradius.conf.php';
+if (!file_exists($confFile)) {
+    fwrite(STDERR, "Config file not found: $confFile\n");
+    exit(1);
+}
+
+$_SERVER['PHP_SELF'] = '/contrib/scripts/check_bundle_expiry.php';
+include($confFile);
 
 // ================== FUNCTIONS ==================
 
@@ -34,124 +42,129 @@ function log_message($msg, $level = 'INFO') {
         mkdir($log_dir, 0755, true);
     }
     file_put_contents(LOG_FILE, date('[Y-m-d H:i:s]') . " [$level] $msg\n", FILE_APPEND);
-    echo date('[Y-m-d H:i:s]') . " [$level] $msg\n";
+    if (php_sapi_name() === 'cli') {
+        echo date('[Y-m-d H:i:s]') . " [$level] $msg\n";
+    }
 }
 
-// ================== MAIN SCRIPT ==================
+/**
+ * Send CoA Disconnect-Request to NAS for a user's active sessions.
+ * Returns the number of successfully sent disconnect packets.
+ */
+function disconnect_user_sessions($db, $username) {
+    $username_esc = $db->real_escape_string($username);
+    $disconnected = 0;
+
+    // Find active sessions for this user
+    $sql = "SELECT ra.nasipaddress, ra.framedipaddress, ra.acctsessionid, n.secret
+            FROM radacct ra
+            LEFT JOIN nas n ON ra.nasipaddress = n.nasname
+            WHERE ra.username = '$username_esc'
+              AND (ra.acctstoptime IS NULL OR ra.acctstoptime = '0000-00-00 00:00:00')";
+
+    $sessions = $db->query($sql);
+    if (!$sessions || $sessions->num_rows === 0) {
+        return 0;
+    }
+
+    while ($sess = $sessions->fetch_assoc()) {
+        $nasip = $sess['nasipaddress'];
+        $framedip = $sess['framedipaddress'];
+        $secret = $sess['secret'] ?: 'secret';
+
+        if (empty($nasip) || empty($framedip)) {
+            continue;
+        }
+
+        // Send Disconnect-Request via radclient (1 retry, 2 second timeout)
+        $cmd = sprintf(
+            'echo "Framed-IP-Address = %s" | /usr/bin/radclient -x %s:3799 disconnect %s -r 1 -t 2 2>&1',
+            escapeshellarg($framedip),
+            escapeshellarg($nasip),
+            escapeshellarg($secret)
+        );
+
+        $output = [];
+        $returnCode = 0;
+        exec($cmd, $output, $returnCode);
+
+        if ($returnCode === 0) {
+            log_message("  CoA sent: user=$username NAS=$nasip IP=$framedip");
+            $disconnected++;
+        } else {
+            log_message("  CoA failed: user=$username NAS=$nasip IP=$framedip rc=$returnCode", 'WARNING');
+        }
+    }
+
+    return $disconnected;
+}
+
+// ================== MAIN ==================
 
 try {
-    // Check for lock file
+    // Lock file (prevent concurrent runs)
     if (file_exists(LOCK_FILE)) {
-        $pid = file_get_contents(LOCK_FILE);
-        log_message("Script already running with PID $pid", 'WARNING');
-        exit(0);
+        $pid = trim(file_get_contents(LOCK_FILE));
+        if ($pid && file_exists("/proc/$pid")) {
+            exit(0); // Already running, exit silently
+        }
+        unlink(LOCK_FILE);
     }
-    
     file_put_contents(LOCK_FILE, getmypid());
-    log_message("========================================");
-    log_message("=== BUNDLE EXPIRY CHECK START ===");
-    log_message("========================================");
-    log_message("Date: " . date('Y-m-d H:i:s'));
-    
+
     // Database connection
-    $db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+    $db = new mysqli(
+        $configValues['CONFIG_DB_HOST'],
+        $configValues['CONFIG_DB_USER'],
+        $configValues['CONFIG_DB_PASS'],
+        $configValues['CONFIG_DB_NAME']
+    );
     if ($db->connect_error) {
         throw new Exception("DB Connection Failed: " . $db->connect_error);
     }
     $db->set_charset("utf8mb4");
-    log_message("Connected to database");
-    
-    // Initialize managers
-    $bundleManager = new BundleManager($db);
-    $radiusManager = new RadiusAccessManager($db);
-    
-    // Find and expire bundles
-    $result = $bundleManager->checkAndExpireBundles();
-    
-    $expiredCount = $result['expired_count'];
-    $expiredBundles = $result['bundles'];
-    
-    log_message("Found $expiredCount expired bundles");
-    
-    $blocked = 0;
-    $failed = 0;
-    
-    // Block users with expired bundles
-    foreach ($expiredBundles as $bundle) {
-        $username = $bundle['username'];
-        $bundleId = $bundle['id'];
-        $planName = $bundle['plan_name'];
-        
-        try {
-            // Check if user has other active bundle or monthly subscription
-            $sql = sprintf(
-                "SELECT subscription_type_id, current_bundle_id, planName 
-                 FROM userbillinfo 
-                 WHERE username = '%s'",
-                $db->real_escape_string($username)
-            );
-            
-            $userResult = $db->query($sql);
-            if (!$userResult || $userResult->num_rows === 0) {
-                log_message("SKIP: $username - User not found", 'WARNING');
-                continue;
-            }
-            
-            $user = $userResult->fetch_assoc();
-            
-            // If user has monthly subscription (type_id = 1), don't block
-            if ($user['subscription_type_id'] == 1) {
-                log_message("SKIP: $username - Has monthly subscription, not blocking", 'INFO');
-                continue;
-            }
-            
-            // If user has another active bundle, don't block
-            $hasOtherBundle = $bundleManager->hasActiveBundle($user['id'] ?? 0);
-            if ($hasOtherBundle) {
-                log_message("SKIP: $username - Has another active bundle", 'INFO');
-                continue;
-            }
-            
-            // Remove from plan groups
-            $radiusManager->removeFromPlanGroups($username, $planName);
-            
-            // Block user (add to block_user group)
-            $blockResult = $radiusManager->revokeAccess(
-                $username,
-                "Bundle expired: $planName (ID: $bundleId)"
-            );
-            
-            if ($blockResult['success']) {
-                log_message(sprintf(
-                    "BLOCKED: $username - Bundle expired: $planName (Expiry: %s)",
-                    $bundle['expiry_date']
-                ), 'INFO');
-                $blocked++;
-            } else {
-                throw new Exception($blockResult['message']);
-            }
-            
-        } catch (Exception $e) {
-            log_message("FAILED: $username - " . $e->getMessage(), 'ERROR');
-            $failed++;
-        }
+
+    // Fetch unprocessed disconnect requests
+    $result = $db->query(
+        "SELECT id, username, reason FROM pending_disconnects WHERE processed = 0 ORDER BY created_at ASC LIMIT 100"
+    );
+
+    if (!$result || $result->num_rows === 0) {
+        $db->close();
+        exit(0); // Nothing to do
     }
-    
+
+    $total = $result->num_rows;
+    $disconnected = 0;
+    $processedIds = [];
+
+    log_message("Processing $total pending disconnect(s)");
+
+    while ($row = $result->fetch_assoc()) {
+        $username = $row['username'];
+        $reason = $row['reason'];
+
+        log_message("Disconnect: $username - $reason");
+        $dc = disconnect_user_sessions($db, $username);
+        $disconnected += $dc;
+
+        $processedIds[] = intval($row['id']);
+    }
+
+    // Mark all as processed
+    if (!empty($processedIds)) {
+        $idList = implode(',', $processedIds);
+        $db->query("UPDATE pending_disconnects SET processed = 1, processed_at = NOW() WHERE id IN ($idList)");
+    }
+
+    log_message("Done: processed=$total disconnects_sent=$disconnected");
+
     $db->close();
-    
-    log_message("========================================");
-    log_message("=== BUNDLE EXPIRY CHECK COMPLETE ===");
-    log_message("========================================");
-    log_message("Expired Bundles: $expiredCount");
-    log_message("Users Blocked: $blocked");
-    log_message("Failed: $failed");
-    log_message("========================================");
-    
+
 } catch (Exception $e) {
-    log_message("FATAL ERROR: " . $e->getMessage(), 'ERROR');
+    log_message("FATAL: " . $e->getMessage(), 'ERROR');
     exit(1);
 } finally {
-    // Remove lock file
     if (file_exists(LOCK_FILE)) {
         unlink(LOCK_FILE);
     }

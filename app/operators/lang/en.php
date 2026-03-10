@@ -799,6 +799,12 @@ $l['button']['ListAgents'] = "List Agents";
 $l['button']['NewAgent'] = "New Agent";
 $l['button']['EditAgent'] = "Edit Agent";
 $l['button']['RemoveAgent'] = "Remove Agent";
+
+$l['button']['PurchaseBundle'] = "Purchase Bundle";
+$l['button']['ListBundles'] = "List Bundles";
+$l['button']['ChangeBundle'] = "Change Bundle";
+$l['button']['AddBalance'] = "Add Balance";
+
 $l['button']['CSVExport'] = "CSV Export";
 
 $l['button']['ProcessQuery'] = "Process Query";
@@ -1935,6 +1941,7 @@ $l['menu']['Gis'] = "GIS";
 $l['menu']['Graphs'] = "Graphs";
 $l['menu']['Config'] = "Config";
 $l['menu']['Help'] = "Help";
+$l['menu']['Bundles'] = "Bundles";
 
 $l['submenu']['General'] = "General";
 $l['submenu']['Reporting'] = "Reporting";
@@ -1965,3 +1972,11 @@ $l['submenu']['Payments'] = "Payments";
 $l['submenu']['Custom'] = "Custom";
 $l['submenu']['Hotspot'] = "Hotspot";
 $l['submenu']['Mail'] = "Mail";
+$l['submenu']['Purchase'] = "Purchase";
+$l['submenu']['Bundles'] = "Bundles";
+$l['submenu']['Change Bundle'] = "Change Bundle";
+$l['submenu']['Add Balance'] = "Add Balance";
+$l['submenu']['Bundle Purchases'] = "Bundle Purchases";
+$l['submenu']['Agent Payments'] = "Agent Payments";
+$l['submenu']['Action History'] = "Action History";
+$l['submenu']['Nodes'] = "Nodes";

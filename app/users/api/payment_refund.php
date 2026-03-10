@@ -131,8 +131,8 @@ try {
         throw new Exception('User not found');
     }
     
-    // Deduct refund amount from balance (reversing the original payment)
-    $balanceResult = $balanceManager->deductBalance(
+    // Add refund amount back to balance
+    $balanceResult = $balanceManager->addBalance(
         $userId,
         $username,
         $refundAmount,
@@ -141,11 +141,11 @@ try {
         'refund',
         null // Will update with refund_id later
     );
-
+    
     if (!$balanceResult['success']) {
         throw new Exception($balanceResult['message']);
     }
-
+    
     $balanceAfter = $balanceResult['new_balance'];
     
     // Record refund

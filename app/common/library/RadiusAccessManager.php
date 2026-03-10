@@ -357,6 +357,20 @@ class RadiusAccessManager
 
             $plan = $result->fetch_assoc();
 
+            // Outdoor plans: no traffic/time limits, bandwidth controlled via RADIUS profile
+            if (stripos($plan['planType'], 'outdoor') !== false) {
+                $u_esc = $this->db->real_escape_string($username);
+                // Clear any existing traffic limits
+                mikrotik_set_radius_attribute($this->db, $username, 'Mikrotik-Total-Limit-Gigawords', '0');
+                mikrotik_set_radius_attribute($this->db, $username, 'Mikrotik-Total-Limit', '0');
+                // Remove time-based attributes
+                $this->db->query("DELETE FROM " . $configValues['CONFIG_DB_TBL_RADCHECK'] .
+                    " WHERE username='$u_esc' AND attribute='Expiration'");
+                $this->db->query("DELETE FROM radreply WHERE username='$u_esc' AND attribute='Session-Timeout'");
+                mikrotik_log("Outdoor plan for $username - no traffic/time limits, bandwidth via profile");
+                return true;
+            }
+
             // Get user's current balances
             $username_esc = $this->db->real_escape_string($username);
             $sql = sprintf(

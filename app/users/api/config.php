@@ -14,14 +14,14 @@
 
 define('API_KEYS', [
     // Agent API Keys
-    'agent_api_production' => 'YOUR_AGENT_API_KEY_HERE',  // Replace with actual key
-    'agent_api_test' => 'test_key_12345',  // For testing only
+    'agent_api_production' => 'b1b266069ed2850f4024cd1efa4273a42262482456a8ffe26894d654d4795188',  // Replace with actual key
+    'agent_api_test' => 'b1b266069ed2850f4024cd1efa4273a42262482456a8ffe26894d654d4795188',  // For testing only
     
     // Admin API Keys
-    'admin_api_production' => 'YOUR_ADMIN_API_KEY_HERE',  // Replace with actual key
+    'admin_api_production' => 'b1b266069ed2850f4024cd1efa4273a42262482456a8ffe26894d654d4795188',  // Replace with actual key
     
     // External ERP API Keys
-    'erp_api_production' => 'YOUR_ERP_API_KEY_HERE',  // Replace with actual key
+    'erp_api_production' => 'b1b266069ed2850f4024cd1efa4273a42262482456a8ffe26894d654d4795188',  // Replace with actual key
 ]);
 
 // ================== SECURITY SETTINGS ==================
@@ -173,7 +173,7 @@ function logApiRequest($endpoint, $method, $ip, $apiKey = null) {
         $apiKey ? substr($apiKey, 0, 8) . '...' : 'None'
     );
     
-    @file_put_contents(API_LOG_FILE, $logEntry, FILE_APPEND);
+    file_put_contents(API_LOG_FILE, $logEntry, FILE_APPEND);
 }
 
 /**
@@ -193,5 +193,5 @@ function logApiError($endpoint, $error, $details = '') {
         $details ? "($details)" : ''
     );
     
-    @file_put_contents(API_ERROR_LOG_FILE, $logEntry, FILE_APPEND);
+    file_put_contents(API_ERROR_LOG_FILE, $logEntry, FILE_APPEND);
 }

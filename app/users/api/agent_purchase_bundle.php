@@ -105,12 +105,10 @@ try {
     
     // Initialize managers
     $bundleManager = new BundleManager($mysqli);
-    $radiusManager = new RadiusAccessManager($mysqli);
-    
-    // Start transaction
-    $mysqli->begin_transaction();
-    
-    // Purchase bundle (auto-activates and deducts balance)
+
+    // Purchase bundle (auto-activates, deducts balance, sets RADIUS attributes)
+    // BundleManager handles its own transaction internally - do NOT wrap in outer transaction
+    // (nested begin_transaction() causes implicit commits in MySQL, breaking rollback)
     $bundleResult = $bundleManager->purchaseBundle(
         $userId,
         $username,
@@ -118,17 +116,16 @@ try {
         null, // Will update with agent_payment_id later
         "agent_{$agentId}"
     );
-    
+
     if (!$bundleResult['success']) {
-        $mysqli->rollback();
         apiSendError($bundleResult['message']);
     }
-    
+
     $bundleId = $bundleResult['bundle_id'];
     $expiryDate = $bundleResult['expiry_date'];
     $newBalance = $bundleResult['new_balance'];
-    
-    // Record in agent_payments
+
+    // Record in agent_payments (after bundle transaction committed successfully)
     $sql = sprintf(
         "INSERT INTO agent_payments (
             agent_id, user_id, username, payment_type, amount,
@@ -151,48 +148,54 @@ try {
         $agentId,
         $_SERVER['REMOTE_ADDR']
     );
-    
+
     if (!$mysqli->query($sql)) {
-        $mysqli->rollback();
         apiSendError('Failed to record agent payment', 500);
     }
-    
+
     $agentPaymentId = $mysqli->insert_id;
-    
+
     // Update bundle with agent_payment_id
     $mysqli->query(sprintf(
         "UPDATE user_bundles SET agent_payment_id = %d WHERE id = %d",
         $agentPaymentId,
         $bundleId
     ));
-    
-    // Grant RADIUS access
-    $accessResult = $radiusManager->grantAccess($username, $planName);
-    
-    if (!$accessResult['success']) {
-        // Non-critical - log but don't fail
-        error_log("RADIUS access grant failed for $username: " . $accessResult['message']);
-    }
-    
-    $mysqli->commit();
+
+    // NOTE: Do NOT call $radiusManager->grantAccess() here.
+    // BundleManager::purchaseBundle() already calls activateBundleRadius() which sets:
+    // - Expiration in radcheck (from bundle_validity_days)
+    // - radusergroup (remove disabled/block, add plan group)
+    // - Session-Timeout, Mikrotik-Rate-Limit, Mikrotik-Total-Limit
+    // Calling grantAccess() after would overwrite/delete the Expiration via setMikrotikAttributesForPlan().
+
+    // Get actual RADIUS group name from billing_plans_profiles
+    $groupResult = $mysqli->query(sprintf(
+        "SELECT GROUP_CONCAT(DISTINCT profile_name ORDER BY profile_name SEPARATOR ', ') AS group_names
+         FROM billing_plans_profiles WHERE plan_name = '%s'",
+        $mysqli->real_escape_string($planName)
+    ));
+    $groupName = ($groupResult && $row = $groupResult->fetch_assoc()) ? $row['group_names'] : $planName;
+
     $mysqli->close();
-    
+
     // Success response
     apiSendSuccess([
         'bundle_id' => $bundleId,
         'plan_name' => $planName,
+        'group_name' => $groupName,
         'amount_charged' => $bundleCost,
         'new_balance' => $newBalance,
         'expiry_date' => $expiryDate,
+        'expiry_date_formatted' => date('d M Y H:i', strtotime($expiryDate)),
         'agent_name' => $agent['name'],
         'agent_payment_id' => $agentPaymentId,
-        'radius_access_granted' => $accessResult['success'],
+        'radius_log' => isset($bundleResult['radius_log']) ? $bundleResult['radius_log'] : [],
         'message' => 'Bundle purchased and activated successfully'
     ]);
-    
+
 } catch (Exception $e) {
     if (isset($mysqli)) {
-        $mysqli->rollback();
         $mysqli->close();
     }
     apiSendError('Internal server error: ' . $e->getMessage(), 500);

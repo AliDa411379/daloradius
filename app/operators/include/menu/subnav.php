@@ -54,6 +54,9 @@ $subnav["rep"] = array(
                             'Status' => 'rep-stat.php',
                             'Batch Users' => 'rep-batch.php',
                             'Dashboard' => 'rep-hb.php',
+                            'Bundle Purchases' => 'rep-bundle-purchases.php',
+                            'Agent Payments' => 'rep-agent-payments.php',
+                            'Action History' => 'rep-action-history.php',
                         );
 
 // mng subnav elements
@@ -87,6 +90,14 @@ $subnav["bill"] = array(
                             'Billing-History' => 'bill-history.php',
                             'Invoices' => 'bill-invoice.php',
                             'Payments' => 'bill-payments.php',
+                        );
+
+// bundle subnav elements
+$subnav["bundle"] = array(
+                            'Purchase' => 'bundle-purchase.php',
+                            'Bundles' => 'bundle-list.php',
+                            'Change Bundle' => 'bundle-change.php',
+                            'Add Balance' => 'bill-balance-add.php',
                         );
 
 // acct subnav elements

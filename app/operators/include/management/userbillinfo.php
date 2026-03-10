@@ -38,7 +38,8 @@ $_input_descriptors0[] = array( 'type' => 'text', 'caption' => t('ContactInfo','
 $subscription_type_options = array(
     '' => 'Not Set',
     'monthly' => 'Monthly Subscription',
-    'prepaid' => 'Prepaid (Bundles)'
+    'prepaid' => 'Prepaid (Bundles)',
+    'outdoor' => 'Outdoor/Fiber Service'
 );
 
 $_input_descriptors0[] = array( 
@@ -113,6 +114,16 @@ $_input_descriptors3[] = array(
                                     'options' => array( "0" => "no", "1" => "yes" ),
                                     'integer_value' => true,
                                     'selected_value' => (isset($bi_changeuserbillinfo) && intval($bi_changeuserbillinfo) == 1) ? '1' : '0',
+                              );
+
+$_input_descriptors3[] = array(
+                                    'type' => 'select',
+                                    'name' => 'bi_auto_reactivate',
+                                    'caption' => 'Auto-Reactivate Bundle',
+                                    'options' => array( "0" => "no", "1" => "yes" ),
+                                    'integer_value' => true,
+                                    'selected_value' => (isset($bi_auto_reactivate) && intval($bi_auto_reactivate) == 1) ? '1' : '0',
+                                    'tooltipText' => 'When enabled, bundle will auto-renew on expiry (from balance or free if insufficient)'
                               );
 
 $_input_descriptors3[] = array( 'caption' => t('all','BillStatus'), 'type' => 'text',  'name' => 'bi_billstatus',

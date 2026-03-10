@@ -139,6 +139,28 @@
                                                     . '<a href="config-operators-edit.php?operator_username=%s" title="Edit">%s</a>',
                                                       $operator_username_enc, $operator_username_enc, urlencode($operator_username_enc));
                                 $logAction .= "Successfully added new operator [$operator_username] on page: ";
+
+                                // Log to action history
+                                try {
+                                    require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                                    $mysqli_log = new mysqli(
+                                        $configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                        $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME'],
+                                        $configValues['CONFIG_DB_PORT']
+                                    );
+                                    if (!$mysqli_log->connect_error) {
+                                        $mysqli_log->set_charset('utf8mb4');
+                                        $actionLogger = new ActionLogger($mysqli_log);
+                                        $actionLogger->log('operator_create', 'operator', $operator_username,
+                                            "Created new operator '$operator_username' (by $currBy)",
+                                            null,
+                                            array('username' => $operator_username, 'firstname' => $firstname,
+                                                  'lastname' => $lastname, 'department' => $department, 'company' => $company)
+                                        );
+                                        $mysqli_log->close();
+                                    }
+                                } catch (Exception $logEx) { error_log("ActionLogger error: " . $logEx->getMessage()); }
+
                             } else {
                                 // it seems that operator could not be added
                                 $f = "Failed to add this new operator [%s] to database";

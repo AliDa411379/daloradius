@@ -33,6 +33,7 @@ $nav = array(
                 "rep"    => array( 'Reports', 'rep-main.php', ),
                 "acct"   => array( 'Accounting', 'acct-main.php', ),
                 "bill"   => array( 'Billing', 'bill-main.php', ),
+                "bundle" => array( 'Bundles', 'bundle-purchase.php', ),
                 "gis"    => array( 'Gis', 'gis-main.php', ),
                 "graphs" => array( 'Graphs', 'graphs-main.php', ),
                 "config" => array( 'Config', 'config-main.php', ),

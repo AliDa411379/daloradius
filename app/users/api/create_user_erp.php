@@ -15,8 +15,7 @@ ini_set('display_errors', 1);
 ini_set('log_errors', 1);
 ini_set('error_log', '/tmp/create_user_erp_api.log');
 
-// Include authentication and config
-require_once('auth.php');
+header('Content-Type: application/json');
 
 $api_path = dirname(__FILE__);
 $app_path = dirname(dirname($api_path));
@@ -33,7 +32,37 @@ if (file_exists($mikrotik_file)) {
     require_once($mikrotik_file);
 }
 
-// Helper for generating random strings
+define('API_KEY', 'b1b266069ed2850f4024cd1efa4273a42262482456a8ffe26894d654d4795188');
+
+function authenticate() {
+    $api_key = $_SERVER['HTTP_X_API_KEY'] ?? $_GET['api_key'] ?? $_POST['api_key'] ?? '';
+    
+    if (!empty(API_KEY) && $api_key === API_KEY) {
+        return ['authenticated' => true, 'user' => 'api'];
+    }
+    
+    session_start();
+    if (isset($_SESSION['operator_user'])) {
+        return ['authenticated' => true, 'user' => $_SESSION['operator_user']];
+    }
+    
+    return ['authenticated' => false, 'user' => null];
+}
+
+function send_response($success, $message, $data = null, $http_code = 200) {
+    http_response_code($http_code);
+    echo json_encode([
+        'success' => $success,
+        'message' => $message,
+        'data' => $data,
+        'timestamp' => date('Y-m-d H:i:s')
+    ], JSON_PRETTY_PRINT);
+    exit;
+}
+
+function send_error($message, $http_code = 400) {
+    send_response(false, $message, null, $http_code);
+}
 
 function generate_random_string($length = 8) {
     $characters = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -67,9 +96,14 @@ function get_request_data() {
 try {
     global $configValues;
     
+    $auth = authenticate();
+    if (!$auth['authenticated']) {
+        send_error('Authentication required', 401);
+    }
+    
     $method = $_SERVER['REQUEST_METHOD'];
     if ($method !== 'POST') {
-        apiSendError('Method not allowed. Use POST', 405);
+        send_error('Method not allowed. Use POST', 405);
     }
     
     $data = get_request_data();
@@ -79,11 +113,11 @@ try {
     $agent_id = $data['agent_id'] ?? 1;
     
     if (empty($external_invoice_id)) {
-        apiSendError('external_invoice_id is required');
+        send_error('external_invoice_id is required');
     }
     
     if (empty($planName)) {
-        apiSendError('plan_name is required');
+        send_error('plan_name is required');
     }
     
     $db = new mysqli(
@@ -95,7 +129,7 @@ try {
     );
     
     if ($db->connect_error) {
-        apiSendError('Database connection failed: ' . $db->connect_error, 500);
+        send_error('Database connection failed: ' . $db->connect_error, 500);
     }
     
     $db->set_charset("utf8mb4");
@@ -106,13 +140,13 @@ try {
     $check_sql = "SELECT id FROM " . $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'] . " WHERE external_invoice_id = '$external_invoice_id'";
     $check_result = $db->query($check_sql);
     if ($check_result && $check_result->num_rows > 0) {
-        apiSendError('External Invoice ID already exists', 400);
+        send_error('External Invoice ID already exists', 400);
     }
     
     $plan_sql = "SELECT * FROM " . $configValues['CONFIG_DB_TBL_DALOBILLINGPLANS'] . " WHERE planName = '$planName' LIMIT 1";
     $plan_result = $db->query($plan_sql);
     if (!$plan_result || $plan_result->num_rows == 0) {
-        apiSendError('Plan not found', 404);
+        send_error('Plan not found', 404);
     }
     $plan_row = $plan_result->fetch_assoc();
     
@@ -124,7 +158,7 @@ try {
     if ($check_user_result) {
         $user_count = $check_user_result->fetch_assoc();
         if ($user_count['cnt'] > 0) {
-            apiSendError('Username generation failed: collision detected', 500);
+            send_error('Username generation failed: collision detected', 500);
         }
     }
     
@@ -137,11 +171,11 @@ try {
     
     $res = $db->query($insert_radcheck_sql);
     if (!$res) {
-        apiSendError('Failed to create user: ' . $db->error, 500);
+        send_error('Failed to create user: ' . $db->error, 500);
     }
     
     $currDate = date('Y-m-d H:i:s');
-    $api_user = 'api';  // From auth system
+    $api_user = $db->real_escape_string($auth['user']);
     
     $nextBillDate = "0000-00-00";
     $planRecurring = $plan_row['planRecurring'] ?? 'No';
@@ -165,18 +199,18 @@ try {
     $res = $db->query($insert_billinfo_sql);
     if (!$res) {
         $db->query("DELETE FROM " . $configValues['CONFIG_DB_TBL_RADCHECK'] . " WHERE username = '$username_escaped'");
-        apiSendError('Failed to create billing info: ' . $db->error, 500);
+        send_error('Failed to create billing info: ' . $db->error, 500);
     }
     
     $userinfo_sql = "INSERT INTO " . $configValues['CONFIG_DB_TBL_DALOUSERINFO'] . 
-        " (username, firstname, lastname, email) VALUES " .
-        "('$username_escaped', '$username_escaped', 'User', '$username_escaped@local')";
+        " (id, username, creationdate, creationby) VALUES " .
+        "(0, '$username_escaped', '$currDate', '$api_user')";
     
     $res = $db->query($userinfo_sql);
     if (!$res) {
         $db->query("DELETE FROM " . $configValues['CONFIG_DB_TBL_RADCHECK'] . " WHERE username = '$username_escaped'");
         $db->query("DELETE FROM " . $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'] . " WHERE username = '$username_escaped'");
-        apiSendError('Failed to create user info: ' . $db->error, 500);
+        send_error('Failed to create user info: ' . $db->error, 500);
     }
     
     $profile_sql = "SELECT profile_name FROM " . $configValues['CONFIG_DB_TBL_DALOBILLINGPLANSPROFILES'] . 
@@ -223,9 +257,9 @@ try {
     ];
     
     $db->close();
-    apiSendSuccess($response_data);
+    send_response(true, 'User created successfully', $response_data, 201);
     
 } catch (Exception $e) {
-    apiSendError('Internal server error: ' . $e->getMessage(), 500);
+    send_error('Internal server error: ' . $e->getMessage(), 500);
 }
 ?>

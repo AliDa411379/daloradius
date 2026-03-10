@@ -29,36 +29,38 @@ class BalanceManager {
      * @param int $referenceId Optional reference ID
      * @return array ['success' => bool, 'new_balance' => float, 'message' => string]
      */
-    public function addBalance($userId, $username, $amount, $createdBy, $notes = '', $referenceType = 'manual', $referenceId = null) {
+    public function addBalance($userId, $username, $amount, $createdBy, $notes = '', $referenceType = 'manual', $referenceId = null, $inTransaction = false) {
         try {
             // Validate inputs
             if ($amount <= 0) {
                 return ['success' => false, 'message' => 'Amount must be greater than zero'];
             }
-            
-            // Start transaction
-            $this->db->begin_transaction();
-            
+
+            // Only start transaction if not already in one (avoids nested transaction bugs)
+            if (!$inTransaction) {
+                $this->db->begin_transaction();
+            }
+
             // Get current balance
             $currentBalance = $this->getBalance($userId);
             if ($currentBalance === false) {
                 throw new Exception('User not found');
             }
-            
+
             $newBalance = $currentBalance + $amount;
-            
-            // Update user balance
+
+            // Update user balance and enable auto-reactivate (so trigger can unblock user)
             $sql = sprintf(
-                "UPDATE %s SET money_balance = %.2f, last_balance_update = NOW() WHERE id = %d",
+                "UPDATE %s SET money_balance = %.2f, last_balance_update = NOW(), auto_reactivate = 1 WHERE id = %d",
                 $this->table_userbillinfo,
                 $newBalance,
                 $userId
             );
-            
+
             if (!$this->db->query($sql)) {
                 throw new Exception('Failed to update balance: ' . $this->db->error);
             }
-            
+
             // Record in balance history
             $this->recordBalanceHistory(
                 $userId,
@@ -72,17 +74,21 @@ class BalanceManager {
                 $notes,
                 $createdBy
             );
-            
-            $this->db->commit();
-            
+
+            if (!$inTransaction) {
+                $this->db->commit();
+            }
+
             return [
                 'success' => true,
                 'new_balance' => $newBalance,
                 'message' => 'Balance added successfully'
             ];
-            
+
         } catch (Exception $e) {
-            $this->db->rollback();
+            if (!$inTransaction) {
+                $this->db->rollback();
+            }
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }
@@ -99,20 +105,23 @@ class BalanceManager {
      * @param string $description Description
      * @return array ['success' => bool, 'new_balance' => float, 'message' => string]
      */
-    public function deductBalance($userId, $username, $amount, $referenceType, $referenceId, $createdBy, $description = '') {
+    public function deductBalance($userId, $username, $amount, $referenceType, $referenceId, $createdBy, $description = '', $inTransaction = false) {
         try {
             if ($amount <= 0) {
                 return ['success' => false, 'message' => 'Amount must be greater than zero'];
             }
-            
-            $this->db->begin_transaction();
-            
+
+            // Only start transaction if not already in one (avoids nested transaction bugs)
+            if (!$inTransaction) {
+                $this->db->begin_transaction();
+            }
+
             // Get current balance
             $currentBalance = $this->getBalance($userId);
             if ($currentBalance === false) {
                 throw new Exception('User not found');
             }
-            
+
             // Check sufficient balance
             if ($currentBalance < $amount) {
                 throw new Exception(sprintf(
@@ -121,14 +130,14 @@ class BalanceManager {
                     $amount
                 ));
             }
-            
+
             $newBalance = $currentBalance - $amount;
-            
+
             // Check minimum balance limit (-300000)
             if ($newBalance < -300000.00) {
                 throw new Exception('Balance would exceed minimum limit of -$300,000');
             }
-            
+
             // Update user balance
             $sql = sprintf(
                 "UPDATE %s SET money_balance = %.2f, last_balance_update = NOW() WHERE id = %d",
@@ -136,11 +145,11 @@ class BalanceManager {
                 $newBalance,
                 $userId
             );
-            
+
             if (!$this->db->query($sql)) {
                 throw new Exception('Failed to update balance: ' . $this->db->error);
             }
-            
+
             // Record in balance history
             $this->recordBalanceHistory(
                 $userId,
@@ -154,17 +163,21 @@ class BalanceManager {
                 $description,
                 $createdBy
             );
-            
-            $this->db->commit();
-            
+
+            if (!$inTransaction) {
+                $this->db->commit();
+            }
+
             return [
                 'success' => true,
                 'new_balance' => $newBalance,
                 'message' => 'Balance deducted successfully'
             ];
-            
+
         } catch (Exception $e) {
-            $this->db->rollback();
+            if (!$inTransaction) {
+                $this->db->rollback();
+            }
             return ['success' => false, 'message' => $e->getMessage()];
         }
     }

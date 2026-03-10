@@ -272,7 +272,7 @@ $valid_paymentStatus = array(
 $valid_vendorTypes = array( "Any", "2Checkout", "PayPal" );
 $valid_billactions = array( "Any", "Refill Session Time", "Refill Session Traffic" );
 
-$valid_planTypes = array(  "unlimited", "traffic","time", "hybrid" );
+$valid_planTypes = array(  "unlimited", "traffic","time", "hybrid", "outdoor" );
 $valid_planRecurringPeriods = array( "Daily", "Weekly", "Monthly", "Quarterly", "Semi-Yearly", "Yearly", );
 $valid_planRecurringBillingSchedules = array( "Fixed", "Anniversary", );
 $valid_planCurrencys = [

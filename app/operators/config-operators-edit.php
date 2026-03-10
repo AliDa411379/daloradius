@@ -143,6 +143,27 @@
             
                 $successMsg = "Updated settings for: <b> $operator_username_enc </b>";
                 $logAction .= "Successfully updated settings for operator user [$operator_username] on page: ";
+
+                // Log to action history
+                try {
+                    require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                    $mysqli_log = new mysqli(
+                        $configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                        $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME'],
+                        $configValues['CONFIG_DB_PORT']
+                    );
+                    if (!$mysqli_log->connect_error) {
+                        $mysqli_log->set_charset('utf8mb4');
+                        $actionLogger = new ActionLogger($mysqli_log);
+                        $actionLogger->log('operator_edit', 'operator', $operator_username,
+                            "Updated operator '$operator_username' settings (by $currBy)",
+                            null,
+                            array('firstname' => $firstname, 'lastname' => $lastname,
+                                  'department' => $department, 'company' => $company)
+                        );
+                        $mysqli_log->close();
+                    }
+                } catch (Exception $logEx) { error_log("ActionLogger error: " . $logEx->getMessage()); }
             }
         
         } else {

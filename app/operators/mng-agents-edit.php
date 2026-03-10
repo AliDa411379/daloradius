@@ -177,6 +177,27 @@
 											$successMsg .= " and permissions";
 										}
 										$logAction .= "Successfully updated agent [$agent_name] on page: ";
+
+										// Log to action history
+										try {
+											require_once(__DIR__ . '/../common/library/ActionLogger.php');
+											$mysqli_log = new mysqli(
+												$configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+												$configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME'],
+												$configValues['CONFIG_DB_PORT']
+											);
+											if (!$mysqli_log->connect_error) {
+												$mysqli_log->set_charset('utf8mb4');
+												$actionLogger = new ActionLogger($mysqli_log);
+												$actionLogger->log('agent_edit', 'agent', $agent_name,
+													"Updated agent '$agent_name'" . ($acl_updated ? " and permissions" : ""),
+													null,
+													array('company' => $company, 'phone' => $phone,
+														  'email' => $email, 'city' => $city, 'country' => $country)
+												);
+												$mysqli_log->close();
+											}
+										} catch (Exception $logEx) { error_log("ActionLogger error: " . $logEx->getMessage()); }
 								}
 							}
 						}

@@ -145,6 +145,12 @@ $descriptors1[] = array( 'type' => 'form', 'title' => t('button','TopUser'), 'ac
 $descriptors2 = array();
 $descriptors2[] = array( 'type' => 'link', 'label' => t('button','History'),
                          'href' => 'rep-history.php', 'icon' => 'clock-history', );
+$descriptors2[] = array( 'type' => 'link', 'label' => 'Action History',
+                         'href' => 'rep-action-history.php', 'icon' => 'journal-text', );
+$descriptors2[] = array( 'type' => 'link', 'label' => 'Bundle Purchases',
+                         'href' => 'rep-bundle-purchases.php', 'icon' => 'box-seam', );
+$descriptors2[] = array( 'type' => 'link', 'label' => 'Agent Payments',
+                         'href' => 'rep-agent-payments.php', 'icon' => 'cash-coin', );
 
 $sections = array();
 $sections[] = array( 'title' => 'User Reports', 'descriptors' => $descriptors1 );

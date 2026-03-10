@@ -212,6 +212,14 @@
                             $old_balance,
                             $new_balance
                         );
+
+                        // Log balance addition
+                        try {
+                            require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                            $actionLogger = new ActionLogger($mysqli);
+                            $actionLogger->log('balance_topup', 'user', $username,
+                                "Added balance $add_amount to '$username' (Old: $old_balance, New: $new_balance)");
+                        } catch (Exception $e) { /* logging should not break balance add */ }
                     } else {
                         throw new Exception($result['message']);
                     }

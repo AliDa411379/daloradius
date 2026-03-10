@@ -364,6 +364,23 @@
                     $_SESSION['notification'] = array( 'username' => $username, 'type' => 'user-welcome' );
 
                     $logAction .= sprintf("Successfully inserted new %s [%s] on page: ", $what, $u);
+
+                    // Log user creation
+                    try {
+                        $mysqli = new mysqli($configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                            $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME']);
+                        if (!$mysqli->connect_error) {
+                            require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                            $actionLogger = new ActionLogger($mysqli);
+                            $actionLogger->log('user_create', 'user', $username,
+                                "Created user '$username' (Auth: $authType, Groups: " . implode(',', $groups) . ")",
+                                null,
+                                ['username' => $username, 'authType' => $authType, 'firstname' => $firstname,
+                                 'lastname' => $lastname, 'email' => $email]
+                            );
+                            $mysqli->close();
+                        }
+                    } catch (Exception $e) { /* logging should not break user creation */ }
                 }
             }
 

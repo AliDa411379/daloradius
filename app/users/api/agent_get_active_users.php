@@ -67,11 +67,14 @@ try {
     
     // Build WHERE clause
     $whereConditions = ["ap.agent_id = $agentId"];
-    
+
     if ($status !== 'all') {
         $whereConditions[] = sprintf("u.billstatus = '%s'", $mysqli->real_escape_string($status));
+        if ($status === 'active') {
+             $whereConditions[] = "u.username NOT IN (SELECT username FROM radusergroup WHERE groupname = 'daloRADIUS-Disabled-Users')";
+        }
     }
-    
+
     if ($subscriptionType !== 'all') {
         $typeId = ($subscriptionType === 'monthly') ? 1 : 2;
         $whereConditions[] = "u.subscription_type_id = $typeId";
@@ -124,6 +127,27 @@ try {
     
     $users = [];
     while ($row = $result->fetch_assoc()) {
+        // Get online status and usage
+        $username_esc = $mysqli->real_escape_string($row['username']);
+        $online_sql = "SELECT acctstarttime, acctsessiontime, (acctinputoctets + acctoutputoctets) as total_bytes 
+                       FROM radacct 
+                       WHERE username = '$username_esc' 
+                       AND (acctstoptime IS NULL OR acctstoptime='0000-00-00 00:00:00')
+                       ORDER BY acctstarttime DESC LIMIT 1";
+        $online_res = $mysqli->query($online_sql);
+        $is_online = false;
+        $online_time = 0;
+        $online_traffic = 0;
+        $connected_since = null;
+        
+        if ($online_res && $online_res->num_rows > 0) {
+            $online_row = $online_res->fetch_assoc();
+            $is_online = true;
+            $online_time = intval($online_row['acctsessiontime']);
+            $online_traffic = intval($online_row['total_bytes']);
+            $connected_since = $online_row['acctstarttime'];
+        }
+        
         $userData = [
             'username' => $row['username'],
             'full_name' => trim($row['full_name']) ?: $row['username'],
@@ -131,7 +155,11 @@ try {
             'plan_name' => $row['plan_name'],
             'balance' => floatval($row['balance']),
             'status' => $row['status'],
-            'creation_date' => $row['creation_date']
+            'creation_date' => $row['creation_date'],
+            'is_online' => $is_online,
+            'online_time_str' => gmdate("H:i:s", $online_time),
+            'online_traffic_mb' => round($online_traffic / 1048576, 2),
+            'connected_since' => $connected_since
         ];
         
         // Add subscription-specific fields
@@ -156,6 +184,7 @@ try {
         'returned_count' => count($users),
         'limit' => $limit,
         'offset' => $offset,
+        'online_only' => $onlineOnly,
         'users' => $users
     ]);
     

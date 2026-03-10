@@ -478,7 +478,9 @@ function update_user_billing_info($dbSocket, $username, $params) {
                             "creditcardname", "creditcardnumber", "creditcardverification", "creditcardtype",
                             "creditcardexp", "notes", "changeuserbillinfo", "lead", "coupon", "ordertaker", "billstatus",
                             "lastbill", "nextbill", "nextinvoicedue", "billdue", "postalinvoice", "faxinvoice",
-                            "emailinvoice", "batch_id", "creationdate", "creationby", "updatedate", "updateby"
+                            "emailinvoice", "batch_id", "subscription_type", "subscription_type_id",
+                            "auto_reactivate",
+                            "creationdate", "creationby", "updatedate", "updateby"
                           );
 
     $skipFields = array( "id", "username" );
@@ -528,7 +530,9 @@ function add_user_billing_info($dbSocket, $username, $params) {
                             "creditcardname", "creditcardnumber", "creditcardverification", "creditcardtype",
                             "creditcardexp", "notes", "changeuserbillinfo", "lead", "coupon", "ordertaker", "billstatus",
                             "lastbill", "nextbill", "nextinvoicedue", "billdue", "postalinvoice", "faxinvoice",
-                            "emailinvoice", "batch_id", "creationdate", "creationby", "updatedate", "updateby"
+                            "emailinvoice", "batch_id", "subscription_type", "subscription_type_id",
+                            "auto_reactivate",
+                            "creationdate", "creationby", "updatedate", "updateby"
                           );
 
     $skipFields = array( "id", "username" );

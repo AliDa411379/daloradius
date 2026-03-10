@@ -132,6 +132,16 @@
                 $bundle_validity_days = (array_key_exists('bundle_validity_days', $_POST)) ? intval(trim($_POST['bundle_validity_days'])) : 0;
                 $bundle_validity_hours = (array_key_exists('bundle_validity_hours', $_POST)) ? intval(trim($_POST['bundle_validity_hours'])) : 0;
         
+                // ---- Price Change Tracking: fetch old values before UPDATE ----
+                $sql_old = sprintf("SELECT id, planCost, planSetupCost, planTax, planBandwidthUp, planBandwidthDown,
+                                          planTrafficTotal, planTrafficUp, planTrafficDown,
+                                          bundle_validity_days, bundle_validity_hours, planActive, planType,
+                                          is_bundle, planRecurring, planRecurringPeriod
+                                     FROM %s WHERE planName='%s'",
+                                   $configValues['CONFIG_DB_TBL_DALOBILLINGPLANS'], $dbSocket->escapeSimple($planName));
+                $res_old = $dbSocket->query($sql_old);
+                $oldPlanValues = $res_old->fetchRow(DB_FETCHMODE_ASSOC);
+
                 // Get old groups before updating if reassign is requested
                 $old_groups = array();
                 if ($reassign_users) {
@@ -166,7 +176,32 @@
                                    $dbSocket->escapeSimple($planName));
                 $res = $dbSocket->query($sql);
                 $logDebugSQL .= "$sql;\n";
-                
+
+                // ---- Price Change Tracking: log changes after UPDATE ----
+                if ($oldPlanValues && !PEAR::isError($res)) {
+                    try {
+                        $mysqli = new mysqli($configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                            $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME']);
+                        if (!$mysqli->connect_error) {
+                            require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                            $actionLogger = new ActionLogger($mysqli);
+                            $newPlanValues = [
+                                'planCost' => $planCost, 'planSetupCost' => $planSetupCost, 'planTax' => $planTax,
+                                'planBandwidthUp' => $planBandwidthUp, 'planBandwidthDown' => $planBandwidthDown,
+                                'planTrafficTotal' => $planTrafficTotal, 'planTrafficUp' => $planTrafficUp,
+                                'planTrafficDown' => $planTrafficDown, 'bundle_validity_days' => $bundle_validity_days,
+                                'bundle_validity_hours' => $bundle_validity_hours, 'planActive' => $planActive,
+                                'planType' => $planType, 'is_bundle' => $is_bundle,
+                                'planRecurring' => $planRecurring, 'planRecurringPeriod' => $planRecurringPeriod
+                            ];
+                            $actionLogger->logPlanChanges($planName, $oldPlanValues, $newPlanValues);
+                            $mysqli->close();
+                        }
+                    } catch (Exception $e) {
+                        // Don't break the page if logging fails
+                    }
+                }
+
                 // to change a plan's association of the profiles we removed all existing
                 // association for this group and re-create it.
                 $sql = sprintf("DELETE FROM %s WHERE plan_name='%s'",
@@ -366,7 +401,7 @@
                                         "type" => "select",
                                         "options" => array( "yes", "no" ),
                                         "caption" => t('all','PlanActive'),
-                                        "name" => "planRecurring",
+                                        "name" => "planActive",
                                         "selected_value" => $planActive,
                                      );
 

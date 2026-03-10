@@ -81,6 +81,20 @@ if (array_key_exists('csrf_token', $_POST) && isset($_POST['csrf_token']) &&
         $sql = sprintf($sqlFormat, $configValues['CONFIG_DB_TBL_DALOOPERATORS'], $now, $operator_user);
         $res = $dbSocket->query($sql);
 
+        // Log operator login to action log
+        try {
+            $mysqli = new mysqli($configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME']);
+            if (!$mysqli->connect_error) {
+                require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                $actionLogger = new ActionLogger($mysqli);
+                $actionLogger->log('operator_login', 'operator', $operator_user,
+                    "Operator '$operator_user' logged in",
+                    null, null, $operator_user);
+                $mysqli->close();
+            }
+        } catch (Exception $e) { /* logging should not break login */ }
+
     }
     
     // close connection to db before redirecting

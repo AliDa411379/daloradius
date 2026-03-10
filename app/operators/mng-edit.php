@@ -197,6 +197,7 @@
             $bi_faxinvoice = (array_key_exists('bi_faxinvoice', $_POST) && isset($_POST['bi_faxinvoice'])) ? $_POST['bi_faxinvoice'] : "";
             $bi_emailinvoice = (array_key_exists('bi_emailinvoice', $_POST) && isset($_POST['bi_emailinvoice'])) ? $_POST['bi_emailinvoice'] : "";
             $bi_subscription_type = (array_key_exists('bi_subscription_type', $_POST) && isset($_POST['bi_subscription_type'])) ? $_POST['bi_subscription_type'] : "";
+            $bi_auto_reactivate = (isset($_POST['bi_auto_reactivate']) && $_POST['bi_auto_reactivate'] === '1') ? '1' : '0';
 
             // this is forced to 0 (disabled) if user portal login password is empty
             $bi_changeuserbillinfo = (!empty($ui_PortalLoginPassword) && isset($_POST['bi_changeuserbillinfo']) && $_POST['bi_changeuserbillinfo'] === '1')
@@ -307,6 +308,7 @@
                                     "notes" => $bi_notes,
                                     "changeuserbillinfo" => $bi_changeuserbillinfo,
                                     "subscription_type" => $bi_subscription_type,
+                                    "auto_reactivate" => $bi_auto_reactivate,
 
                                     //~ "billstatus" => $bi_billstatus,
                                     //~ "lastbill" => $bi_lastbill,
@@ -374,7 +376,20 @@
 
                 $successMsg = sprintf("Successfully updated user <strong>%s</strong>", $username_enc);
                 $logAction .= sprintf("Successfully updated user %s on page: ", $username);
-                
+
+                // Log user edit
+                try {
+                    $mysqli_log = new mysqli($configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                        $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME']);
+                    if (!$mysqli_log->connect_error) {
+                        require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                        $actionLogger = new ActionLogger($mysqli_log);
+                        $actionLogger->log('user_edit', 'user', $username,
+                            "Edited user '$username'" . ($planName != $oldplanName ? " (plan changed from '$oldplanName' to '$planName')" : ''));
+                        $mysqli_log->close();
+                    }
+                } catch (Exception $e) { /* logging should not break edit */ }
+
                 if ($planName != $oldplanName) {
                     $script_path = __DIR__ . '/../../contrib/scripts/mikrotik_attributes_sync_v2.php';
                     if (file_exists($script_path)) {
@@ -428,7 +443,8 @@
         $sql = sprintf("SELECT planName, contactperson, company, email, phone, address, city, state, country, zip, paymentmethod,
                                cash, creditcardname, creditcardnumber, creditcardverification, creditcardtype, creditcardexp,
                                notes, changeuserbillinfo, `lead`, coupon, ordertaker, billstatus, lastbill, nextbill,
-                               nextinvoicedue, billdue, postalinvoice, faxinvoice, emailinvoice, subscription_type, creationdate, creationby,
+                               nextinvoicedue, billdue, postalinvoice, faxinvoice, emailinvoice, subscription_type,
+                               auto_reactivate, creationdate, creationby,
                                updatedate, updateby
                           FROM %s WHERE username='%s'", $configValues['CONFIG_DB_TBL_DALOUSERBILLINFO'],
                                                         $dbSocket->escapeSimple($username));
@@ -440,7 +456,8 @@
                 $bi_country, $bi_zip, $bi_paymentmethod, $bi_cash, $bi_creditcardname, $bi_creditcardnumber,
                 $bi_creditcardverification, $bi_creditcardtype, $bi_creditcardexp, $bi_notes, $bi_changeuserbillinfo,
                 $bi_lead, $bi_coupon, $bi_ordertaker, $bi_billstatus, $bi_lastbill, $bi_nextbill, $bi_nextinvoicedue,
-                $bi_billdue, $bi_postalinvoice, $bi_faxinvoice, $bi_emailinvoice, $bi_subscription_type, $bi_creationdate, $bi_creationby,
+                $bi_billdue, $bi_postalinvoice, $bi_faxinvoice, $bi_emailinvoice, $bi_subscription_type,
+                $bi_auto_reactivate, $bi_creationdate, $bi_creationby,
                 $bi_updatedate, $bi_updateby
             ) = $res->fetchRow();
 

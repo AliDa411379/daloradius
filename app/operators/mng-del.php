@@ -193,6 +193,21 @@
                             $format = "%d user(s) have been deleted";
                             $successMsg = sprintf($format, $dbusersLen);
                             $logAction = sprintf("$format on page: ", $dbusersLen);
+
+                            // Log user deletion
+                            try {
+                                $mysqli = new mysqli($configValues['CONFIG_DB_HOST'], $configValues['CONFIG_DB_USER'],
+                                                    $configValues['CONFIG_DB_PASS'], $configValues['CONFIG_DB_NAME']);
+                                if (!$mysqli->connect_error) {
+                                    require_once(__DIR__ . '/../common/library/ActionLogger.php');
+                                    $actionLogger = new ActionLogger($mysqli);
+                                    foreach ($usernames as $del_user) {
+                                        $actionLogger->log('user_delete', 'user', $del_user,
+                                            "Deleted user '$del_user'" . ($delradacct ? ' (with accounting data)' : ''));
+                                    }
+                                    $mysqli->close();
+                                }
+                            } catch (Exception $e) { /* logging should not break deletion */ }
                             
                         } else {
                             $failureMsg = "You have provided an empty or invalid username list";
